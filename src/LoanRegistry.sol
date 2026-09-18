@@ -46,6 +46,12 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     uint256 public maxDuration;
     uint256 public defaultGracePeriod;
     uint256 public collateralApprovalThreshold;
+    /// @notice Addresses permitted to call markDefault() on behalf of
+    ///         the protocol (e.g. an automated keeper bot). Managed by
+    ///         the owner via setKeeper(). Kept as a mapping so multiple
+    ///         keepers can be authorised and individually revoked without
+    ///         a redeployment (RISK-04 fix).
+    mapping(address => bool) public keepers;
 
     event LoanRequested(uint256 indexed loanId, address indexed borrower, uint256 principal, ILoanRegistry.LoanStatus initialStatus);
     event LoanApproved(uint256 indexed loanId, address indexed approver);
@@ -60,6 +66,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     event UnderwriterPoolSet(address indexed underwriterPool);
     event RecipientRegistrySet(address indexed recipientRegistry);
     event ReservePoolSet(address indexed reservePool);
+    event KeeperSet(address indexed keeper, bool allowed);
 
     error NotVault();
     error NotRouter();
@@ -83,6 +90,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     error LoanNotActive();
     error LoanNotDefaultable();
     error DefaultGraceNotElapsed();
+    error NotAuthorized();
 
     modifier onlyVault() {
         _onlyVault();
@@ -151,6 +159,18 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         if (_reservePool == address(0)) revert ZeroAddress();
         reservePool = IReservePool(_reservePool);
         emit ReservePoolSet(_reservePool);
+    }
+
+    /// @notice Add or remove an address from the keeper set.
+    ///         Keepers are the only non-owner addresses permitted to
+    ///         call markDefault(). Intended for automated keeper bots
+    ///         that monitor loan expiry and trigger defaults; they have
+    ///         no other elevated privileges anywhere in the protocol
+    ///         (RISK-04 fix).
+    function setKeeper(address keeper, bool allowed) external onlyOwner {
+        if (keeper == address(0)) revert ZeroAddress();
+        keepers[keeper] = allowed;
+        emit KeeperSet(keeper, allowed);
     }
 
     function _validateProposal(LoanProposal calldata proposal) internal view returns (bool needsApproval) {
@@ -259,6 +279,11 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     }
 
     function markDefault(uint256 loanId) external {
+        // RISK-04 fix: restrict to owner or an authorised keeper bot.
+        // Prevents any EOA from front-running a loan into default and
+        // triggering irreversible collateral seizure / credit destruction
+        // before a pending repayment can land.
+        if (msg.sender != owner() && !keepers[msg.sender]) revert NotAuthorized();
         Loan storage loan = _loans[loanId];
         if (loan.status != LoanStatus.Active) revert LoanNotDefaultable();
         if (block.timestamp <= loan.expiresAt + defaultGracePeriod) revert DefaultGraceNotElapsed();
