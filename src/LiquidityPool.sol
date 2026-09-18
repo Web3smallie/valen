@@ -21,6 +21,13 @@ interface IReservePoolView {
     function loanPayout(uint256 loanId) external view returns (uint256);
 }
 
+interface ILoanVaultView {
+    /// @notice Amount settled from vault for a Defaulted loan (RISK-01 fix).
+    ///         Set in LoanVault.settleExpiredLoan() and readable even after
+    ///         lockedAmount[loanId] has been cleared.
+    function settledDefaultAmount(uint256 loanId) external view returns (uint256);
+}
+
 /// @title LiquidityPool
 /// @notice Shared, share-accounted USDC liquidity for automatically- and
 ///         manually-approved Valen loans. idleLedger + totalDeployed =
@@ -214,6 +221,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             } else {
                 delta += reservePool.loanPayout(loanId);
             }
+            // RISK-01 fix: if settleExpiredLoan() was called on this defaulted loan,
+            // the vault recorded the recovered amount in settledDefaultAmount[loanId].
+            // Credit it here exactly once, guarded by defaultRecoveryCounted.
+            // We read settledDefaultAmount (not lockedAmount) because lockedAmount
+            // is already zeroed by CEI inside settleExpiredLoan().
+            uint256 vaultSettled = ILoanVaultView(loanVault).settledDefaultAmount(loanId);
+            if (vaultSettled > 0) delta += vaultSettled;
         }
 
         if (delta > 0) {

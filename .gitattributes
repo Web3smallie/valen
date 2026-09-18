@@ -1,0 +1,4 @@
+# Repo uses CRLF line endings (Windows origin).
+* text=auto eol=crlf
+*.sol text eol=crlf
+*.t.sol text eol=crlf

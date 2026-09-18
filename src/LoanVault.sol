@@ -17,6 +17,11 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     address public liquidityPool;
 
     mapping(uint256 => uint256) public lockedAmount;
+    /// @notice Records the amount recovered from the vault for a defaulted loan.
+    ///         Set in settleExpiredLoan() when status == Defaulted so that
+    ///         LiquidityPool.reconcileLoan() can credit it even after lockedAmount
+    ///         has been cleared (RISK-01 fix).
+    mapping(uint256 => uint256) public settledDefaultAmount;
 
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
@@ -140,12 +145,23 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function settleExpiredLoan(uint256 loanId) external nonReentrant {
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
         if (block.timestamp < loan.expiresAt) revert LoanNotExpired();
-        if (loan.status != ILoanRegistry.LoanStatus.Active) revert LoanNotActive();
+        // Accept both Active (normal expiry) and Defaulted (RISK-01 fix: markDefault()
+        // transitions status before settleExpiredLoan() can be called, which would
+        // otherwise permanently strand any unreleased lockedAmount in the vault).
+        if (
+            loan.status != ILoanRegistry.LoanStatus.Active &&
+            loan.status != ILoanRegistry.LoanStatus.Defaulted
+        ) revert LoanNotActive();
 
         uint256 remaining = lockedAmount[loanId];
         if (remaining == 0) revert NothingToSettle();
 
         lockedAmount[loanId] = 0;
+        // Record recovery amount for Defaulted loans so LiquidityPool.reconcileLoan()
+        // can credit it into pool accounting (RISK-01 fix).
+        if (loan.status == ILoanRegistry.LoanStatus.Defaulted) {
+            settledDefaultAmount[loanId] = remaining;
+        }
         emit ExpiredLoanSettled(loanId, loan.lender, remaining);
 
         usdc.safeTransfer(loan.lender, remaining);
