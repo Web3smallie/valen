@@ -67,6 +67,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
     uint256 private _reentrancyStatus;
+    /// @notice One-time guard that records when settledDefaultAmount[loanId]
+    ///         has been credited into idleLedger. Independent of
+    ///         defaultRecoveryCounted so that vault settlement is recognised
+    ///         whether settleExpiredLoan() is called before OR after the first
+    ///         reconcileLoan() (RISK-03 fix). Appended at end of storage to
+    ///         preserve all existing slot positions.
+    mapping(uint256 => bool) public vaultSettlementCounted;
 
     event LiquidityInitialized(uint256 amount, uint256 shares);
     event Deposited(address indexed lender, uint256 amount, uint256 shares);
@@ -221,13 +228,23 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             } else {
                 delta += reservePool.loanPayout(loanId);
             }
-            // RISK-01 fix: if settleExpiredLoan() was called on this defaulted loan,
-            // the vault recorded the recovered amount in settledDefaultAmount[loanId].
-            // Credit it here exactly once, guarded by defaultRecoveryCounted.
-            // We read settledDefaultAmount (not lockedAmount) because lockedAmount
-            // is already zeroed by CEI inside settleExpiredLoan().
+        }
+
+        // RISK-03 fix: account for vault settlement independently of the
+        // collateral/underwriter/reserve block above. settleExpiredLoan() may
+        // be called either before or after the first reconcileLoan(). Using a
+        // separate vaultSettlementCounted guard ensures the amount is credited
+        // exactly once regardless of call order, and cannot be double-counted
+        // with the one-time defaultRecoveryCounted block.
+        if (
+            loan.status == ILoanRegistry.LoanStatus.Defaulted &&
+            !vaultSettlementCounted[loanId]
+        ) {
             uint256 vaultSettled = ILoanVaultView(loanVault).settledDefaultAmount(loanId);
-            if (vaultSettled > 0) delta += vaultSettled;
+            if (vaultSettled > 0) {
+                vaultSettlementCounted[loanId] = true;
+                delta += vaultSettled;
+            }
         }
 
         if (delta > 0) {
