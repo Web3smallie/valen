@@ -100,7 +100,11 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ///         so a PendingApproval loan is exactly as unfundable here as
     ///         via the direct path. approveLoan() remains a real on-chain
     ///         gate, not a frontend convention.
-    function fundFromPool(uint256 loanId) external nonReentrant {
+    ///         Restricted to the LoanVault owner (the Valen backend) because
+    ///         this function deploys shared LP capital -- only the protocol
+    ///         operator should decide which loans receive pool funding
+    ///         (RISK-05 fix).
+    function fundFromPool(uint256 loanId) external onlyOwner nonReentrant {
         if (liquidityPool == address(0)) revert LiquidityPoolNotSet();
 
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
