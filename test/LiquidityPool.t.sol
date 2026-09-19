@@ -538,7 +538,7 @@ contract LiquidityPoolTest is Test {
         // Simulates a profit landing directly in idleLedger for test setup
         // purposes only — real flows always go through reconcileLoan().
         usdc.mint(address(pool), amount);
-        vm.store(address(pool), bytes32(uint256(1)), bytes32(pool.idleLedger() + amount)); // slot 1 assumed for idleLedger — see note below
+        vm.store(address(pool), bytes32(uint256(7)), bytes32(pool.idleLedger() + amount)); // slot 7: idleLedger (verified via forge inspect) — see note below
     }
 
     function _fundReservePoolDirectly(uint256 amount) internal {
