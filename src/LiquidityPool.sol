@@ -74,6 +74,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ///         reconcileLoan() (RISK-03 fix). Appended at end of storage to
     ///         preserve all existing slot positions.
     mapping(uint256 => bool) public vaultSettlementCounted;
+    /// @notice Maximum number of pool-funded loans that may be simultaneously
+    ///         active. Prevents _reconcileAll() from exceeding block gas limits
+    ///         (RISK-10 fix). Appended at slot 21 -- safe UUPS append.
+    uint256 public maxActiveLoans;
 
     event LiquidityInitialized(uint256 amount, uint256 shares);
     event Deposited(address indexed lender, uint256 amount, uint256 shares);
@@ -93,6 +97,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InsufficientShares();
     error AlreadyFunded();
     error NoSharesOutstanding();
+    error TooManyActiveLoans();
+    error InvalidMaxActiveLoans();
 
     modifier onlyLoanVault() {
         if (msg.sender != loanVault) revert NotLoanVault();
@@ -135,6 +141,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         reservePool = IReservePoolView(_reservePool);
         loanVault = _loanVault;
         _reentrancyStatus = _NOT_ENTERED;
+        maxActiveLoans = 150;
     }
 
     /// @notice Owner-only first deposit — closes the front-running window
@@ -190,6 +197,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (principalAdvanced[loanId] != 0) revert AlreadyFunded();
         if (amount > idleLedger) revert InsufficientLiquidity();
 
+        if (activeLoanIds.length >= maxActiveLoans) revert TooManyActiveLoans();
         idleLedger -= amount;
         totalDeployed += amount;
         principalAdvanced[loanId] = amount;
@@ -321,6 +329,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function activeLoanCount() external view returns (uint256) {
         return activeLoanIds.length;
+    }
+
+    /// @notice Owner-only setter for the active-loan cap.
+    ///         Allows adjusting the limit after deployment without an upgrade.
+    /// @param newMax New maximum number of simultaneously active pool-funded loans.
+    event MaxActiveLoansChanged(uint256 oldMax, uint256 newMax);
+
+    function setMaxActiveLoans(uint256 newMax) external onlyOwner {
+        if (newMax == 0) revert InvalidMaxActiveLoans();
+        emit MaxActiveLoansChanged(maxActiveLoans, newMax);
+        maxActiveLoans = newMax;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
