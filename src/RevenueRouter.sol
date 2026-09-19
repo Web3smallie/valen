@@ -29,6 +29,12 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
     uint256 private constant _ENTERED = 2;
     uint256 private _reentrancyStatus;
 
+    /// @notice For each defaulted loan, tracks how much of the reserve
+    ///         payout has been clawed back via post-default garnishments
+    ///         (RISK-09 fix). Appended at slot 7, after _reentrancyStatus
+    ///         (slot 6), so all existing storage slots are unchanged.
+    mapping(uint256 => uint256) public reserveRepaid;
+
     event RevenueReceived(uint256 indexed loanId, address indexed payer, uint256 amount);
     event SelfRepayment(uint256 indexed loanId, address indexed borrower, uint256 amount);
     event RepaymentRecovered(uint256 indexed loanId, uint256 repaymentShare, uint256 creditWalletShare);
@@ -166,6 +172,25 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
                 emit ReserveContribution(loanId, reserveCut);
             }
         }
+        // RISK-09 fix: for defaulted loans that received a reserve payout,
+        // redirect post-default garnishments back to the reserve (up to the
+        // outstanding payout balance) before crediting the lender. This
+        // prevents the lender from receiving both the reserve payout and
+        // the subsequent garnishment, and keeps pool accounting correct
+        // because only funds physically reaching the pool are credited via
+        // poolRecovered() rather than totalRecovered().
+        if (isDefaulted && address(reservePool) != address(0) && lenderShare > 0) {
+            uint256 paid = reservePool.loanPayout(loanId);
+            if (paid > 0) {
+                uint256 remaining = paid - reserveRepaid[loanId];
+                if (remaining > 0) {
+                    uint256 toReserve = lenderShare > remaining ? remaining : lenderShare;
+                    reserveRepaid[loanId] += toReserve;
+                    usdc.safeTransfer(address(reservePool), toReserve);
+                    lenderShare -= toReserve;
+                }
+            }
+        }
 
         bool justCompleted = totalRecovered[loanId] >= loan.totalRepaymentDue;
         if (justCompleted) {
@@ -193,6 +218,18 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
 
     function isFullyRepaid(uint256 loanId) external view returns (bool) {
         return repaidHandled[loanId];
+    }
+
+    /// @notice Returns the portion of totalRecovered that physically
+    ///         reached the lender/pool — i.e., excluding any amount
+    ///         redirected to the ReservePool as garnishment claw-back
+    ///         (RISK-09 fix). LiquidityPool.reconcileLoan uses this
+    ///         instead of totalRecovered to avoid crediting funds that
+    ///         never arrived at the pool.
+    function poolRecovered(uint256 loanId) external view returns (uint256) {
+        uint256 rec = totalRecovered[loanId];
+        uint256 rep = reserveRepaid[loanId];
+        return rec > rep ? rec - rep : 0;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

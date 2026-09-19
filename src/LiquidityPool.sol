@@ -211,7 +211,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (principalAdvanced[loanId] == 0) return;
         if (finalized[loanId]) return;
 
-        uint256 routerTotal = revenueRouter.totalRecovered(loanId);
+        // RISK-09 fix: use poolRecovered (= totalRecovered - reserveRepaid)
+        // so only USDC that physically reached the pool is credited to
+        // idleLedger. Post-default garnishments redirected to the reserve
+        // are excluded from this delta.
+        uint256 routerTotal = revenueRouter.poolRecovered(loanId);
         uint256 delta = routerTotal - lastRouterRecorded[loanId];
         lastRouterRecorded[loanId] = routerTotal;
 

@@ -3,5 +3,8 @@ pragma solidity ^0.8.24;
 
 interface IRevenueRouter {
     function totalRecovered(uint256 loanId) external view returns (uint256);
+    /// @notice Amount of totalRecovered that physically reached the
+    ///         lender/pool (excludes reserve claw-back, RISK-09 fix).
+    function poolRecovered(uint256 loanId) external view returns (uint256);
     function isFullyRepaid(uint256 loanId) external view returns (bool);
 }

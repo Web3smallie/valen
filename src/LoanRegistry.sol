@@ -337,12 +337,16 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         if (msg.sender != router) revert NotRouter();
         Loan storage loan = _loans[loanId];
         if (loan.status != LoanStatus.Active && loan.status != LoanStatus.Defaulted) revert LoanNotActive();
+        bool wasActive = loan.status == LoanStatus.Active;
         loan.status = LoanStatus.Repaid;
 
-        // RISK-08: release the outstanding-principal reservation now that
-        // the loan is fully repaid.  Capped to prevent underflow if a legacy
-        // loan predates this accounting.
-        outstandingPrincipal[loan.borrower] -= loan.principal;
+        // RISK-08: release the outstanding-principal reservation when the
+        // loan is repaid. Only decrement when transitioning from Active —
+        // the Defaulted path already decremented in markDefault(), so a
+        // second decrement here would underflow (RISK-09 fix).
+        if (wasActive) {
+            outstandingPrincipal[loan.borrower] -= loan.principal;
+        }
 
         if (loan.collateralAmount > 0) {
             collateralVault.release(loanId);
