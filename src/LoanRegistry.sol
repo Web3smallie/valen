@@ -52,6 +52,10 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     ///         keepers can be authorised and individually revoked without
     ///         a redeployment (RISK-04 fix).
     mapping(address => bool) public keepers;
+    /// @notice Tracks total principal currently outstanding (requested,
+    ///         approved, or active) for each borrower so concurrent loans
+    ///         cannot collectively exceed the credit limit (RISK-08 fix).
+    mapping(address => uint256) public outstandingPrincipal;
 
     event LoanRequested(uint256 indexed loanId, address indexed borrower, uint256 principal, ILoanRegistry.LoanStatus initialStatus);
     event LoanApproved(uint256 indexed loanId, address indexed approver);
@@ -191,7 +195,12 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
             if (proposal.underwriterAmount > 0) {
                 effectiveLimit += proposal.underwriterAmount;
             }
-            if (proposal.principal > effectiveLimit) revert ExceedsCreditLimit();
+            // RISK-08: compare against available credit (ceiling minus
+            // already-outstanding principal) to prevent concurrent loans
+            // from collectively exceeding the credit limit.
+            uint256 usedCredit = outstandingPrincipal[msg.sender];
+            uint256 available = usedCredit >= effectiveLimit ? 0 : effectiveLimit - usedCredit;
+            if (proposal.principal > available) revert ExceedsCreditLimit();
             needsApproval = creditRegistry.requiresApproval(proposal.principal);
         }
 
@@ -243,6 +252,11 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         bool needsApproval = _validateProposal(proposal);
         loanId = _storeLoan(proposal, needsApproval);
 
+        // RISK-08: record principal as outstanding from the moment a loan
+        // is requested so subsequent concurrent requests are checked against
+        // the reduced available credit.
+        outstandingPrincipal[msg.sender] += proposal.principal;
+
         if (proposal.collateralAmount > 0) {
             collateralVault.reserveCollateral(loanId, msg.sender, proposal.collateralAmount, proposal.principal);
         } else if (proposal.underwriterAmount > 0) {
@@ -290,6 +304,9 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
 
         loan.status = LoanStatus.Defaulted;
 
+        // RISK-08: release the outstanding-principal reservation on default.
+        outstandingPrincipal[loan.borrower] -= loan.principal;
+
         if (loan.collateralAmount > 0) {
             collateralVault.seize(loanId);
             creditRegistry.recordDefault(loan.borrower, false);
@@ -321,6 +338,11 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         Loan storage loan = _loans[loanId];
         if (loan.status != LoanStatus.Active && loan.status != LoanStatus.Defaulted) revert LoanNotActive();
         loan.status = LoanStatus.Repaid;
+
+        // RISK-08: release the outstanding-principal reservation now that
+        // the loan is fully repaid.  Capped to prevent underflow if a legacy
+        // loan predates this accounting.
+        outstandingPrincipal[loan.borrower] -= loan.principal;
 
         if (loan.collateralAmount > 0) {
             collateralVault.release(loanId);
