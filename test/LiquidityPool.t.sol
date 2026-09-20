@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {LoanRegistry} from "../src/LoanRegistry.sol";
 import {LoanVault} from "../src/LoanVault.sol";
 import {CreditRegistry} from "../src/CreditRegistry.sol";
@@ -47,53 +47,53 @@ contract LiquidityPoolTest is Test {
     function setUp() public {
         usdc = new MockUSDC5();
 
-        creditRegistry = CreditRegistry(Upgrades.deployUUPSProxy(
-            "CreditRegistry.sol",
+        creditRegistry = CreditRegistry(address(new ERC1967Proxy(
+            address(new CreditRegistry()),
             abi.encodeCall(CreditRegistry.initialize, (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6))
-        ));
+        )));
 
-        registry = LoanRegistry(Upgrades.deployUUPSProxy(
-            "LoanRegistry.sol",
+        registry = LoanRegistry(address(new ERC1967Proxy(
+            address(new LoanRegistry()),
             abi.encodeCall(LoanRegistry.initialize, (owner, address(creditRegistry), 1 days, 365 days, DEFAULT_GRACE_PERIOD, COLLATERAL_APPROVAL_THRESHOLD))
-        ));
+        )));
 
-        router = RevenueRouter(Upgrades.deployUUPSProxy(
-            "RevenueRouter.sol",
+        router = RevenueRouter(address(new ERC1967Proxy(
+            address(new RevenueRouter()),
             abi.encodeCall(RevenueRouter.initialize, (owner, address(registry), address(creditRegistry), address(usdc)))
-        ));
+        )));
 
-        vault = LoanVault(Upgrades.deployUUPSProxy(
-            "LoanVault.sol",
+        vault = LoanVault(address(new ERC1967Proxy(
+            address(new LoanVault()),
             abi.encodeCall(LoanVault.initialize, (owner, address(registry), address(usdc)))
-        ));
+        )));
 
-        collateralVault = CollateralVault(Upgrades.deployUUPSProxy(
-            "CollateralVault.sol",
+        collateralVault = CollateralVault(address(new ERC1967Proxy(
+            address(new CollateralVault()),
             abi.encodeCall(CollateralVault.initialize, (owner, address(usdc), address(registry), MAX_LTV_BPS))
-        ));
+        )));
 
-        underwriterPool = UnderwriterPool(Upgrades.deployUUPSProxy(
-            "UnderwriterPool.sol",
+        underwriterPool = UnderwriterPool(address(new ERC1967Proxy(
+            address(new UnderwriterPool()),
             abi.encodeCall(UnderwriterPool.initialize, (owner, address(usdc), address(registry)))
-        ));
+        )));
 
-        recipientRegistry = RecipientRegistry(Upgrades.deployUUPSProxy(
-            "RecipientRegistry.sol",
+        recipientRegistry = RecipientRegistry(address(new ERC1967Proxy(
+            address(new RecipientRegistry()),
             abi.encodeCall(RecipientRegistry.initialize, (owner))
-        ));
+        )));
 
-        reservePool = ReservePool(Upgrades.deployUUPSProxy(
-            "ReservePool.sol",
+        reservePool = ReservePool(address(new ERC1967Proxy(
+            address(new ReservePool()),
             abi.encodeCall(ReservePool.initialize, (owner, address(usdc), address(registry)))
-        ));
+        )));
 
-        pool = LiquidityPool(Upgrades.deployUUPSProxy(
-            "LiquidityPool.sol",
+        pool = LiquidityPool(address(new ERC1967Proxy(
+            address(new LiquidityPool()),
             abi.encodeCall(
                 LiquidityPool.initialize,
                 (owner, address(usdc), address(registry), address(router), address(collateralVault), address(underwriterPool), address(reservePool), address(vault))
             )
-        ));
+        )));
 
         registry.setContracts(address(vault), address(router));
         registry.setCollateralVault(address(collateralVault));
@@ -109,8 +109,13 @@ contract LiquidityPoolTest is Test {
         recipientRegistry.approveRecipient(address(0xD00D), keccak256("COMPUTE"), "Test Provider");
 
         // Seed borrower credit high enough for the test loans below.
-        vm.prank(address(router));
-        creditRegistry.recordRepayment(borrower, 5_000e6, false);
+        vm.startPrank(address(router));
+        // Seed borrower credit to ~30,005e6 (15 calls × 2,000e6 maxStepIncrease + 1,255e6 initial)
+        // so that large loans (test_D/E: 30,000e6) clear the RISK-08 credit check.
+        for (uint256 i = 0; i < 15; i++) {
+            creditRegistry.recordRepayment(borrower, 8_000e6, false); // each caps at maxStepIncrease=2,000e6
+        }
+        vm.stopPrank();
 
         usdc.mint(lisa, 1_000_000e6);
         usdc.mint(mo, 1_000_000e6);
@@ -275,9 +280,6 @@ contract LiquidityPoolTest is Test {
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_proposal(5e6, 5.75e6, 10000, 0, address(0), 0));
         vault.fundFromPool(loanId);
-
-        vm.prank(vault.owner()); // vault itself doesn't call markFunded directly in this flow — markFunded already happened inside fundFromPool
-        // (no-op prank, left for clarity that no further vault action is needed)
 
         vm.prank(client);
         router.payRevenue(loanId, 5.75e6); // 100% rate -> full repaymentShare = 5.75e6
@@ -542,8 +544,6 @@ contract LiquidityPoolTest is Test {
     }
 
     function _fundReservePoolDirectly(uint256 amount) internal {
-        usdc.mint(owner, amount);
-        usdc.approve(address(reservePool), amount);
-        usdc.transferFrom(owner, address(reservePool), amount);
+        usdc.mint(address(reservePool), amount);
     }
 }
