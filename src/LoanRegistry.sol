@@ -129,7 +129,6 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     }
 
     function setContracts(address _vault, address _router) external onlyOwner {
-        if (vault != address(0) || router != address(0)) revert ContractsAlreadySet();
         if (_vault == address(0) || _router == address(0)) revert ZeroAddress();
         vault = _vault;
         router = _router;
@@ -152,7 +151,6 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     }
 
     function setRecipientRegistry(address _recipientRegistry) external onlyOwner {
-        if (address(recipientRegistry) != address(0)) revert RecipientRegistryAlreadySet();
         if (_recipientRegistry == address(0)) revert ZeroAddress();
         recipientRegistry = IRecipientRegistry(_recipientRegistry);
         emit RecipientRegistrySet(_recipientRegistry);
