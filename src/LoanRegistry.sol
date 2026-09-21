@@ -79,6 +79,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     error UnderwriterPoolAlreadySet();
     error RecipientRegistryAlreadySet();
     error ReservePoolAlreadySet();
+    error LoansAlreadyExist();
     error ZeroAddress();
     error LengthMismatch();
     error NoMilestones();
@@ -137,14 +138,14 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     }
 
     function setCollateralVault(address _collateralVault) external onlyOwner {
-        if (address(collateralVault) != address(0)) revert CollateralVaultAlreadySet();
+        if (nextLoanId > 0) revert LoansAlreadyExist();
         if (_collateralVault == address(0)) revert ZeroAddress();
         collateralVault = ICollateralVault(_collateralVault);
         emit CollateralVaultSet(_collateralVault);
     }
 
     function setUnderwriterPool(address _underwriterPool) external onlyOwner {
-        if (address(underwriterPool) != address(0)) revert UnderwriterPoolAlreadySet();
+        if (nextLoanId > 0) revert LoansAlreadyExist();
         if (_underwriterPool == address(0)) revert ZeroAddress();
         underwriterPool = IUnderwriterPool(_underwriterPool);
         emit UnderwriterPoolSet(_underwriterPool);
@@ -157,7 +158,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     }
 
     function setReservePool(address _reservePool) external onlyOwner {
-        if (address(reservePool) != address(0)) revert ReservePoolAlreadySet();
+        if (nextLoanId > 0) revert LoansAlreadyExist();
         if (_reservePool == address(0)) revert ZeroAddress();
         reservePool = IReservePool(_reservePool);
         emit ReservePoolSet(_reservePool);

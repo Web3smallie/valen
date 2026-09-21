@@ -43,6 +43,7 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error LoanNotExpired();
     error NothingToSettle();
     error LiquidityPoolAlreadySet();
+    error ActiveLoansExist();
     error LiquidityPoolNotSet();
 
     modifier nonReentrant() {
@@ -74,7 +75,7 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function setLiquidityPool(address _liquidityPool) external onlyOwner {
-        if (liquidityPool != address(0)) revert LiquidityPoolAlreadySet();
+        if (liquidityPool != address(0) && ILiquidityPool(liquidityPool).activeLoanCount() > 0) revert ActiveLoansExist();
         if (_liquidityPool == address(0)) revert ZeroAddress();
         liquidityPool = _liquidityPool;
         emit LiquidityPoolSet(_liquidityPool);

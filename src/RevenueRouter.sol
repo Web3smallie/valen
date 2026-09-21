@@ -50,6 +50,7 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
     error PayerNotAllowed();
     error OnlyBorrowerCanSelfRepay();
     error ReservePoolAlreadySet();
+    error LoansAlreadyExist();
 
     modifier nonReentrant() {
         _nonReentrantBefore();
@@ -84,7 +85,7 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
     }
 
     function setReservePool(address _reservePool, uint16 _reserveBps) external onlyOwner {
-        if (address(reservePool) != address(0)) revert ReservePoolAlreadySet();
+        if (registry.nextLoanId() > 0) revert LoansAlreadyExist();
         if (_reservePool == address(0)) revert ZeroAddress();
         reservePool = IReservePool(_reservePool);
         reserveBps = _reserveBps;

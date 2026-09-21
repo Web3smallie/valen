@@ -52,7 +52,7 @@ interface ILoanRegistry {
         address underwriter;      // Path B: address(0) = no underwriter
         uint256 underwriterAmount; // Path B: >0 = underwriter-backed amount
     }
-    
+
     function getCollateralAmount(uint256 loanId) external view returns (uint256);
     function getUnderwriterAmount(uint256 loanId) external view returns (uint256);
     function getLoan(uint256 loanId) external view returns (LoanView memory);
@@ -62,4 +62,5 @@ interface ILoanRegistry {
     function markFunded(uint256 loanId, address lender) external;
     function markMilestoneReleased(uint256 loanId, uint256 milestoneIndex) external;
     function markRepaid(uint256 loanId) external;
+    function nextLoanId() external view returns (uint256);
 }
