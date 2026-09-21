@@ -86,6 +86,14 @@ contract UnderwriterPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, 
 
     /// @notice Underwriter sets (or updates) the ceiling they're willing to
     ///         back a specific borrower for. Underwriter-initiated, by design.
+    /// @dev    This commitment is a revocable ceiling. It does NOT lock or
+    ///         reserve any USDC. Actual stake is reserved atomically when a
+    ///         qualifying loan request executes via `reserveStake`. If the
+    ///         underwriter withdraws stake or revokes this commitment before
+    ///         `requestLoan` executes, that call will revert with
+    ///         `InsufficientStakeBalance` -- no loan state is created and no
+    ///         funds are lost. The borrower may retry with a different
+    ///         underwriter or wait for the underwriter to re-deposit.
     function commitToAgent(address borrower, uint256 amount) external {
         if (borrower == address(0)) revert ZeroAddress();
         commitments[msg.sender][borrower] = amount;

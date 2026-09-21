@@ -266,22 +266,23 @@ Add a separate upgrade path or replace the setter with a TimelockController-gate
 
 ---
 
-### RISK-14 · Medium · Underwriter Can Withdraw Unreserved Stake While a Loan They Underwrote Is Still Active
+### RISK-14 · Accepted design / documented
 
-**Contract / Function:** `UnderwriterPool.withdrawStake()` (lines 79–84)
+**Contract / Function:** `UnderwriterPool.commitToAgent()` / `UnderwriterPool.withdrawStake()`
 
-**Root cause:**  
-`withdrawStake` only checks `stakeBalance[msg.sender] >= amount`, where `stakeBalance` tracks *unreserved* stake. Stake reserved for a specific loan is excluded from `stakeBalance` (it is deducted in `reserveStake`). This is correct for the reserved portion. However, an underwriter who committed `commitments[underwriter][borrower] = X` but whose stake has not yet been reserved (loan still in Requested/PendingApproval) can withdraw all their deposited stake, leaving a commitment that cannot be fulfilled.
+**Original finding:**
+An underwriter can withdraw deposited stake after calling `commitToAgent` but before the borrower's `requestLoan` executes, causing `reserveStake` to revert with `InsufficientStakeBalance`.
 
-**Failure scenario:**  
-Underwriter commits 30 000 USDC to borrower. Deposits 30 000 USDC. Borrower requests loan. Before `reserveStake` is called in `requestLoan`, the underwriter front-runs and withdraws their stake. `requestLoan` then calls `reserveStake(loanId, underwriter, borrower, amount)`, which checks `stakeBalance[underwriter] >= amount` — this now reverts with `InsufficientStakeBalance`. The loan cannot be funded. The borrower's proposal is permanently stuck (though no funds are at risk).
+**Corrected characterisation:**
+The original finding incorrectly stated that a failed `requestLoan` leaves the borrower's proposal "permanently stuck." This is not the case. `reserveStake` is called atomically within `requestLoan` in the same transaction. If `reserveStake` reverts, the entire `requestLoan` transaction reverts: no loan ID is assigned, no `outstandingPrincipal` is incremented, and no on-chain state is created. The borrower simply retries.
 
-**Note:** In the current flow, `reserveStake` is called atomically within `requestLoan` (same transaction), so front-running is only possible if the underwriter is monitoring the mempool and submitting a higher-gas withdrawal. On Arc Testnet with sub-second finality this window is very short.
+**Actual race:**
+An underwriter monitoring the mempool can submit a higher-gas `withdrawStake` that executes before the borrower's `requestLoan`. This causes `requestLoan` to revert. No funds are lost and no on-chain loan state is corrupted. The window is negligible on Arc Testnet due to sub-second finality.
 
-**Impact:** DoS on the borrower's loan proposal in adversarial conditions. Severity: Medium.
+**Why `totalCommitted` was rejected:**
+`commitToAgent` is intentionally designed as a revocable underwriting ceiling -- a statement of current willingness -- not a capital lock. The NatSpec explicitly uses the word "willing." An underwriter may commit to multiple borrowers whose aggregate commitments exceed their deposited stake, because only one loan per underwriter per loan ID can ever be reserved at a time. Locking `stakeBalance >= sum(all commitments)` would impose a 100% reserve requirement against all outstanding credit ceilings simultaneously, which changes the fundamental economic model from "attestation ceiling" to "reserved capital." This was rejected as an incorrect behavioural change. Furthermore, the legitimate revocation path (`commitToAgent(borrower, 0)` followed by `withdrawStake`) produces the identical UX outcome and is not affected by any `totalCommitted` constraint.
 
-**Minimal fix:**  
-Track committed-but-not-yet-reserved stake separately, or prevent withdrawal if `sum(commitments[underwriter][*]) > stakeBalance[underwriter]`.
+**Disposition:** Accepted design. The `commitToAgent` NatSpec has been updated to document the revocable-ceiling semantics explicitly. No Solidity or storage changes required.
 
 ---
 
@@ -369,7 +370,7 @@ Wrap `setParameters` behind a `TimelockController` on mainnet deployment.
 | RISK-11 | **Medium** | LiquidityPool test suite fails with MemoryOOG — zero CI coverage on most critical contract |
 | RISK-12 | **Medium** | `setLiquidityPool` is one-way and irrecoverable without a contract upgrade |
 | RISK-13 | **Medium** | `setContracts` is one-way — vault and router can never be rotated without upgrade |
-| RISK-14 | **Medium** | Underwriter can withdraw stake before reservation, DoS-ing a borrower's proposal |
+| RISK-14 | **Accepted design** | Commitment is a revocable ceiling; `requestLoan` is atomic and reverts cleanly if stake is unavailable; `totalCommitted` guard rejected as incorrect economic model change |
 | RISK-15 | **Low** | Budget categories not cross-validated against recipient registry categories |
 | RISK-16 | **Low** | `totalRecovered` overflow at boundary — analysis shows cap is in place (informational) |
 | RISK-17 | **Low** | Deploy script omits `LiquidityPool` deployment and `vault.setLiquidityPool` wiring |
