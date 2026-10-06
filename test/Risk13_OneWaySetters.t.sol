@@ -4,11 +4,10 @@ pragma solidity ^0.8.24;
 // -----------------------------------------------------------------
 // RISK-13 regression tests -- LoanRegistry one-way setters
 //
-// Verifies that setContracts and setRecipientRegistry are repeatable
-// after the AlreadySet guards are removed, that authorization and
-// zero-address checks are preserved, that rotation correctly changes
-// which callers pass onlyVault / onlyRouter guards, and that
-// existing loan state is unaffected by a configuration rotation.
+// Verifies that setContracts is a one-time operation (ContractsAlreadySet
+// on any second call), that setRecipientRegistry is repeatable,
+// that authorization and zero-address checks are preserved, and that
+// existing loan state is unaffected by a RecipientRegistry rotation.
 //
 // Uses ERC1967Proxy deployment to avoid the OZ-FFI MemoryOOG.
 // -----------------------------------------------------------------
@@ -24,6 +23,7 @@ import {UnderwriterPool}    from "../src/UnderwriterPool.sol";
 import {RecipientRegistry}  from "../src/RecipientRegistry.sol";
 import {ReservePool}        from "../src/ReservePool.sol";
 import {LiquidityPool}      from "../src/LiquidityPool.sol";
+import {AgentRegistry}      from "../src/AgentRegistry.sol";
 import {ILoanRegistry}      from "../src/interfaces/ILoanRegistry.sol";
 import {ERC20}              from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -65,6 +65,8 @@ contract ApproveNoneRegistry {
 
 contract Risk13_OneWaySettersTest is Test {
 
+    AgentRegistry     agentReg;
+    uint256           agentId;
     LoanRegistry      registry;
     LoanVault         vault;
     CreditRegistry    creditReg;
@@ -97,10 +99,20 @@ contract Risk13_OneWaySettersTest is Test {
     function setUp() public {
         usdc = new MockUSDC_R13();
 
+        // AgentRegistry
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, creditWallet);
+
         creditReg = CreditRegistry(_proxy(
             address(new CreditRegistry()),
             abi.encodeCall(CreditRegistry.initialize,
-                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6))
+                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         ));
 
         registry = LoanRegistry(_proxy(
@@ -164,14 +176,15 @@ contract Risk13_OneWaySettersTest is Test {
         registry.setUnderwriterPool(address(uwPool));
         registry.setRecipientRegistry(address(recipReg));
         registry.setReservePool(address(reserve));
+        registry.setAgentRegistry(address(agentReg));
         vault.setLiquidityPool(address(pool));
         reserve.setAuthorizedContributor(address(router), true);
         creditReg.setAuthorizedCaller(address(registry), true);
         creditReg.setAuthorizedCaller(address(router), true);
 
-        // Borrower credit seed
+        // Borrower credit seed — write to credits[agentId] so _validateProposal passes
         vm.prank(address(router));
-        creditReg.recordRepayment(borrower, 5_000e6, false);
+        creditReg.recordRepayment(agentId, 5_000e6, false);
 
         // Recipient
         recipReg.approveRecipient(creditWallet, keccak256("COMPUTE"), "CW");
@@ -196,6 +209,7 @@ contract Risk13_OneWaySettersTest is Test {
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("ops"), cap: PRINCIPAL});
         return ILoanRegistry.LoanProposal({
+            agentId:               agentId,
             creditWallet:          creditWallet,
             principal:             PRINCIPAL,
             totalRepaymentDue:     TOTAL_DUE,
@@ -228,82 +242,57 @@ contract Risk13_OneWaySettersTest is Test {
         assertEq(registry.router(), address(router), "router set");
     }
 
-    function test_SC_02_OwnerCanRotateContracts() public {
+    function test_SC_02_SecondCallRevertsContractsAlreadySet() public {
+        // setContracts is one-time: any second call must revert regardless of args.
         FakeVault  vault2  = new FakeVault(address(registry));
         FakeRouter router2 = new FakeRouter(address(registry));
 
-        vm.expectEmit(true, false, false, false);
-        emit LoanRegistry.VaultSet(address(vault2));
-        vm.expectEmit(true, false, false, false);
-        emit LoanRegistry.RouterSet(address(router2));
-
+        vm.expectRevert(LoanRegistry.ContractsAlreadySet.selector);
         registry.setContracts(address(vault2), address(router2));
-
-        assertEq(registry.vault(),  address(vault2),  "vault updated");
-        assertEq(registry.router(), address(router2), "router updated");
     }
 
-    function test_SC_03_NewVaultPassesOnlyVaultAfterRotation() public {
-        // Create a loan so there is something to call markFunded on.
-        // Use a fresh request after rotation — markFunded is called on Requested loans.
+    function test_SC_03_SecondCallWithSameArgsAlsoReverts() public {
+        // Even passing identical addresses must revert after first set.
+        vm.expectRevert(LoanRegistry.ContractsAlreadySet.selector);
+        registry.setContracts(address(vault), address(router));
+    }
+
+    function test_SC_04_SetContractsIsImmutable_VaultUnchanged() public {
         FakeVault  vault2  = new FakeVault(address(registry));
         FakeRouter router2 = new FakeRouter(address(registry));
+
+        // Attempt rotation — must revert.
+        vm.expectRevert(LoanRegistry.ContractsAlreadySet.selector);
         registry.setContracts(address(vault2), address(router2));
 
-        // Request a loan (recipReg still set, borrower has credit)
+        // vault is unchanged.
+        assertEq(registry.vault(), address(vault), "vault immutable");
+    }
+
+    function test_SC_05_SetContractsIsImmutable_RouterUnchanged() public {
+        FakeRouter router2 = new FakeRouter(address(registry));
+
+        vm.expectRevert(LoanRegistry.ContractsAlreadySet.selector);
+        registry.setContracts(address(vault), address(router2));
+
+        assertEq(registry.router(), address(router), "router immutable");
+    }
+
+    function test_SC_06_OriginalVaultStillPassesOnlyVault() public {
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_proposal());
 
-        // New vault can call markFunded
-        vault2.callMarkFunded(loanId, directLender);
+        // Original vault is still the authorized vault.
+        vm.prank(directLender);
+        usdc.approve(address(vault), type(uint256).max);
+        vm.prank(directLender);
+        vault.fundLoan(loanId);
+
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
-        assertEq(loan.lender, directLender, "lender set by new vault");
-        assertEq(uint8(loan.status), uint8(ILoanRegistry.LoanStatus.Active), "loan active");
+        assertEq(uint8(loan.status), uint8(ILoanRegistry.LoanStatus.Active), "loan active via original vault");
     }
 
-    function test_SC_04_OldVaultRejectedAfterRotation() public {
-        FakeVault  vault2  = new FakeVault(address(registry));
-        FakeRouter router2 = new FakeRouter(address(registry));
-        registry.setContracts(address(vault2), address(router2));
-
-        vm.prank(borrower);
-        uint256 loanId = registry.requestLoan(_proposal());
-
-        // Old vault (real LoanVault) is no longer authorized
-        vm.expectRevert(LoanRegistry.NotVault.selector);
-        vm.prank(address(vault));
-        registry.markFunded(loanId, directLender);
-    }
-
-    function test_SC_05_NewRouterPassesOnlyRouterAfterRotation() public {
-        // Fund a loan first with the real vault (still authorized at that point)
-        uint256 loanId = _requestAndFund();
-        ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
-        assertEq(uint8(loan.status), uint8(ILoanRegistry.LoanStatus.Active));
-
-        // Now rotate to new router
-        FakeRouter router2 = new FakeRouter(address(registry));
-        registry.setContracts(address(vault), address(router2));
-
-        // New router can call markRepaid
-        router2.callMarkRepaid(loanId);
-        loan = registry.getLoan(loanId);
-        assertEq(uint8(loan.status), uint8(ILoanRegistry.LoanStatus.Repaid), "loan repaid by new router");
-    }
-
-    function test_SC_06_OldRouterRejectedAfterRotation() public {
-        uint256 loanId = _requestAndFund();
-
-        FakeRouter router2 = new FakeRouter(address(registry));
-        registry.setContracts(address(vault), address(router2));
-
-        // Old router (real RevenueRouter) is no longer authorized
-        vm.expectRevert(LoanRegistry.NotRouter.selector);
-        vm.prank(address(router));
-        registry.markRepaid(loanId);
-    }
-
-    function test_SC_07_NonOwnerCannotRotate() public {
+    function test_SC_07_NonOwnerCannotCallSetContracts() public {
         FakeVault  vault2  = new FakeVault(address(registry));
         FakeRouter router2 = new FakeRouter(address(registry));
 
@@ -312,23 +301,35 @@ contract Risk13_OneWaySettersTest is Test {
         registry.setContracts(address(vault2), address(router2));
     }
 
-    function test_SC_08_ZeroVaultReverts() public {
+    function test_SC_08_ZeroVaultRevertsOnFreshRegistry() public {
+        // Deploy a fresh registry that hasn't had setContracts called yet.
+        LoanRegistry fresh = LoanRegistry(_proxy(
+            address(new LoanRegistry()),
+            abi.encodeCall(LoanRegistry.initialize,
+                (owner, address(creditReg), 1 days, 365 days, GRACE, CAT))
+        ));
         vm.expectRevert(LoanRegistry.ZeroAddress.selector);
-        registry.setContracts(address(0), address(router));
+        fresh.setContracts(address(0), address(router));
     }
 
-    function test_SC_09_ZeroRouterReverts() public {
+    function test_SC_09_ZeroRouterRevertsOnFreshRegistry() public {
+        LoanRegistry fresh = LoanRegistry(_proxy(
+            address(new LoanRegistry()),
+            abi.encodeCall(LoanRegistry.initialize,
+                (owner, address(creditReg), 1 days, 365 days, GRACE, CAT))
+        ));
         vm.expectRevert(LoanRegistry.ZeroAddress.selector);
-        registry.setContracts(address(vault), address(0));
+        fresh.setContracts(address(vault), address(0));
     }
 
-    function test_SC_10_ExistingLoanStateUnchangedByRotation() public {
-        // Fund a loan, verify state, rotate, verify state is identical
+    function test_SC_10_ExistingLoanStateStableAfterAttemptedRotation() public {
         uint256 loanId = _requestAndFund();
         ILoanRegistry.LoanView memory before = registry.getLoan(loanId);
 
+        // Attempted rotation must revert — but loan state must be unchanged.
         FakeVault  vault2  = new FakeVault(address(registry));
         FakeRouter router2 = new FakeRouter(address(registry));
+        vm.expectRevert(LoanRegistry.ContractsAlreadySet.selector);
         registry.setContracts(address(vault2), address(router2));
 
         ILoanRegistry.LoanView memory after_ = registry.getLoan(loanId);

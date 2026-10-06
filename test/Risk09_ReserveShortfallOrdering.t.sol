@@ -25,6 +25,7 @@ import {RecipientRegistry}  from "../src/RecipientRegistry.sol";
 import {ReservePool}        from "../src/ReservePool.sol";
 import {LiquidityPool}      from "../src/LiquidityPool.sol";
 import {ILoanRegistry}      from "../src/interfaces/ILoanRegistry.sol";
+import {AgentRegistry}      from "../src/AgentRegistry.sol";
 import {ERC20}              from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockUSDC_R09 is ERC20 {
@@ -34,6 +35,7 @@ contract MockUSDC_R09 is ERC20 {
 
 contract Risk09_ReserveShortfallTest is Test {
 
+    AgentRegistry     agentReg;
     LoanRegistry      registry;
     LoanVault         vault;
     CreditRegistry    creditReg;
@@ -50,6 +52,7 @@ contract Risk09_ReserveShortfallTest is Test {
     address creditWallet = address(0xCAFE);
     address directLender = address(0x1E4DE4);
     address client       = address(0xC1E4);
+    uint256 agentId;
 
     uint256 constant GRACE  = 3 days;
     uint256 constant CAT    = 25_000e6;
@@ -67,10 +70,20 @@ contract Risk09_ReserveShortfallTest is Test {
     function setUp() public {
         usdc = new MockUSDC_R09();
 
+        // AgentRegistry
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, creditWallet);
+
         creditReg = CreditRegistry(_proxy(
             address(new CreditRegistry()),
             abi.encodeCall(CreditRegistry.initialize,
-                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6))
+                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         ));
 
         registry = LoanRegistry(_proxy(
@@ -134,15 +147,17 @@ contract Risk09_ReserveShortfallTest is Test {
         registry.setUnderwriterPool(address(uwPool));
         registry.setRecipientRegistry(address(recipReg));
         registry.setReservePool(address(reserve));
+        registry.setAgentRegistry(address(agentReg));
+        router.setAgentRegistry(address(agentReg));
         vault.setLiquidityPool(address(pool));
         router.setReservePool(address(reserve), RESERVE_BPS);
         reserve.setAuthorizedContributor(address(router), true);
         creditReg.setAuthorizedCaller(address(registry), true);
         creditReg.setAuthorizedCaller(address(router), true);
 
-        // Borrower credit history
+        // Borrower credit history — seed via agentId bridge so credits[agentId] is populated
         vm.prank(address(router));
-        creditReg.recordRepayment(borrower, 5_000e6, false);
+        creditReg.recordRepayment(agentId, 5_000e6, false);
 
         // Recipient
         recipReg.approveRecipient(creditWallet, keccak256("COMPUTE"), "CW");
@@ -179,6 +194,7 @@ contract Risk09_ReserveShortfallTest is Test {
         descs[1] = "M1";
 
         return ILoanRegistry.LoanProposal({
+            agentId:             agentId,
             creditWallet:        creditWallet,
             principal:           principal,
             repaymentRateBps:    RATE_BPS,

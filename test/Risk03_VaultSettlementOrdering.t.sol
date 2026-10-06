@@ -29,6 +29,7 @@ import {RecipientRegistry}   from "../src/RecipientRegistry.sol";
 import {ReservePool}         from "../src/ReservePool.sol";
 import {LiquidityPool}       from "../src/LiquidityPool.sol";
 import {ILoanRegistry}       from "../src/interfaces/ILoanRegistry.sol";
+import {AgentRegistry}       from "../src/AgentRegistry.sol";
 import {ERC20}               from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockUSDC_R03 is ERC20 {
@@ -38,6 +39,7 @@ contract MockUSDC_R03 is ERC20 {
 
 contract Risk03_VaultSettlementOrderingTest is Test {
 
+    AgentRegistry     agentReg;
     LoanRegistry      registry;
     LoanVault         vault;
     CreditRegistry    creditReg;
@@ -55,6 +57,8 @@ contract Risk03_VaultSettlementOrderingTest is Test {
     address client       = address(0xC1E4);
     address underwriter  = address(0x11DE12);
 
+    uint256 agentId;
+
     uint256 constant GRACE   = 3 days;
     uint256 constant CAT     = 10_000e6;
     uint16  constant MAX_LTV = 6600;
@@ -66,10 +70,19 @@ contract Risk03_VaultSettlementOrderingTest is Test {
     function setUp() public {
         usdc = new MockUSDC_R03();
 
+        agentReg = AgentRegistry(_proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        ));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, creditWallet);
+
         creditReg = CreditRegistry(_proxy(
             address(new CreditRegistry()),
             abi.encodeCall(CreditRegistry.initialize,
-                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6))
+                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         ));
 
         registry = LoanRegistry(_proxy(
@@ -127,16 +140,20 @@ contract Risk03_VaultSettlementOrderingTest is Test {
         registry.setUnderwriterPool(address(underwriterPool));
         registry.setRecipientRegistry(address(recipientRegistry));
         registry.setReservePool(address(reservePool));
+        registry.setAgentRegistry(address(agentReg));
+        router.setAgentRegistry(address(agentReg));
         vault.setLiquidityPool(address(pool));
         creditReg.setAuthorizedCaller(address(router), true);
         creditReg.setAuthorizedCaller(address(registry), true);
         reservePool.setAuthorizedContributor(address(router), true);
         router.setReservePool(address(reservePool), 0);
         recipientRegistry.approveRecipient(address(0xD00D), keccak256("COMPUTE"), "Provider");
+        // RISK-15: creditWallet must also be registry-approved
+        recipientRegistry.approveRecipient(creditWallet, keccak256("COMPUTE"), "CreditWallet");
 
-        // Seed borrower credit
+        // Seed borrower credit via agentId bridge so credits[agentId] is populated.
         vm.prank(address(router));
-        creditReg.recordRepayment(borrower, 5_000e6, false);
+        creditReg.recordRepayment(agentId, 5_000e6, false);
 
         usdc.mint(client,      10_000_000e6);
         usdc.mint(underwriter, 10_000_000e6);
@@ -162,14 +179,16 @@ contract Risk03_VaultSettlementOrderingTest is Test {
 
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: principal});
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet; // RISK-15
         uint256 half = principal / 2;
         uint256[] memory ms = new uint256[](2); ms[0] = half; ms[1] = principal - half;
         string[] memory desc = new string[](2); desc[0] = "M1"; desc[1] = "M2";
 
         vm.prank(borrower);
         loanId = registry.requestLoan(ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: creditWallet, principal: principal,
             repaymentRateBps: 10000, totalRepaymentDue: (principal * 115) / 100,
             duration: 30 days, purpose: "RISK-03 test",
@@ -310,14 +329,16 @@ contract Risk03_VaultSettlementOrderingTest is Test {
 
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: principal});
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet; // RISK-15
         uint256 half = principal / 2;
         uint256[] memory ms = new uint256[](2); ms[0] = half; ms[1] = principal - half;
         string[] memory desc = new string[](2); desc[0] = "M1"; desc[1] = "M2";
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: creditWallet, principal: principal,
             repaymentRateBps: 10000, totalRepaymentDue: (principal * 115) / 100,
             duration: 30 days, purpose: "collateral+vault",
@@ -367,14 +388,16 @@ contract Risk03_VaultSettlementOrderingTest is Test {
 
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: principal});
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet; // RISK-15
         uint256 half = principal / 2;
         uint256[] memory ms = new uint256[](2); ms[0] = half; ms[1] = principal - half;
         string[] memory desc = new string[](2); desc[0] = "M1"; desc[1] = "M2";
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: creditWallet, principal: principal,
             repaymentRateBps: 10000, totalRepaymentDue: (principal * 115) / 100,
             duration: 30 days, purpose: "underwriter+vault",
@@ -447,13 +470,15 @@ contract Risk03_VaultSettlementOrderingTest is Test {
         // Single-milestone loan: full principal released before default
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: 50e6});
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet; // RISK-15
         uint256[] memory ms = new uint256[](1); ms[0] = 50e6;
         string[] memory desc = new string[](1); desc[0] = "Full";
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: creditWallet, principal: 50e6,
             repaymentRateBps: 10000, totalRepaymentDue: 57.5e6,
             duration: 30 days, purpose: "zero-vault",
@@ -490,13 +515,15 @@ contract Risk03_VaultSettlementOrderingTest is Test {
 
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: 100e6});
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet; // RISK-15
         uint256[] memory ms = new uint256[](1); ms[0] = 100e6;
         string[] memory desc = new string[](1); desc[0] = "Full";
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: creditWallet, principal: 100e6,
             repaymentRateBps: 10000, totalRepaymentDue: 115e6,
             duration: 30 days, purpose: "direct lender",

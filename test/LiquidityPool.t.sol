@@ -12,6 +12,7 @@ import {UnderwriterPool} from "../src/UnderwriterPool.sol";
 import {RecipientRegistry} from "../src/RecipientRegistry.sol";
 import {ReservePool} from "../src/ReservePool.sol";
 import {LiquidityPool} from "../src/LiquidityPool.sol";
+import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {ILoanRegistry} from "../src/interfaces/ILoanRegistry.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -21,6 +22,8 @@ contract MockUSDC5 is ERC20 {
 }
 
 contract LiquidityPoolTest is Test {
+    AgentRegistry agentReg;
+    uint256 agentId;
     LoanRegistry registry;
     LoanVault vault;
     CreditRegistry creditRegistry;
@@ -47,9 +50,19 @@ contract LiquidityPoolTest is Test {
     function setUp() public {
         usdc = new MockUSDC5();
 
+        // AgentRegistry
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, creditWallet);
+
         creditRegistry = CreditRegistry(address(new ERC1967Proxy(
             address(new CreditRegistry()),
-            abi.encodeCall(CreditRegistry.initialize, (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6))
+            abi.encodeCall(CreditRegistry.initialize, (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         )));
 
         registry = LoanRegistry(address(new ERC1967Proxy(
@@ -105,15 +118,19 @@ contract LiquidityPoolTest is Test {
         reservePool.setAuthorizedContributor(address(router), true);
         router.setReservePool(address(reservePool), 0); // 0% skim — isolating pool-accounting tests from RevenueRouter's own reserve skim
         vault.setLiquidityPool(address(pool));
+        registry.setAgentRegistry(address(agentReg));
+        router.setAgentRegistry(address(agentReg));
 
         recipientRegistry.approveRecipient(address(0xD00D), keccak256("COMPUTE"), "Test Provider");
+        // RISK-15: creditWallet must also be approved and in permittedRecipients
+        recipientRegistry.approveRecipient(creditWallet, keccak256("COMPUTE"), "CreditWallet");
 
         // Seed borrower credit high enough for the test loans below.
         vm.startPrank(address(router));
         // Seed borrower credit to ~30,005e6 (15 calls × 2,000e6 maxStepIncrease + 1,255e6 initial)
         // so that large loans (test_D/E: 30,000e6) clear the RISK-08 credit check.
         for (uint256 i = 0; i < 15; i++) {
-            creditRegistry.recordRepayment(borrower, 8_000e6, false); // each caps at maxStepIncrease=2,000e6
+            creditRegistry.recordRepayment(agentId, 8_000e6, false); // each caps at maxStepIncrease=2,000e6
         }
         vm.stopPrank();
 
@@ -136,14 +153,16 @@ contract LiquidityPoolTest is Test {
     {
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: principal});
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet; // RISK-15
         uint256[] memory ms = new uint256[](1);
         ms[0] = principal;
         string[] memory desc = new string[](1);
         desc[0] = "Full release";
 
         return ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: creditWallet,
             principal: principal,
             repaymentRateBps: rateBps,

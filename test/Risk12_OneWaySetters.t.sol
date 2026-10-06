@@ -12,6 +12,7 @@ import {RecipientRegistry} from "../src/RecipientRegistry.sol";
 import {ReservePool} from "../src/ReservePool.sol";
 import {CollateralVault} from "../src/CollateralVault.sol";
 import {UnderwriterPool} from "../src/UnderwriterPool.sol";
+import {AgentRegistry}  from "../src/AgentRegistry.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ILoanRegistry} from "../src/interfaces/ILoanRegistry.sol";
 
@@ -29,6 +30,8 @@ contract Risk12_OneWaySetters is Test {
     address stranger = address(0xD0);
 
     // ------------------------------------------------------------------ contracts
+    AgentRegistry  agentReg;
+    uint256        agentId;
     LoanRegistry   registry;
     LoanVault      vault;
     LiquidityPool  pool;
@@ -44,11 +47,21 @@ contract Risk12_OneWaySetters is Test {
     function setUp() public {
         usdc = new MockUSDC_R12();
 
+        // AgentRegistry
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, address(0x99)); // creditWallet used in _makeProposal
+
         // CreditRegistry
         creditReg = CreditRegistry(address(new ERC1967Proxy(
             address(new CreditRegistry()),
             abi.encodeCall(CreditRegistry.initialize,
-                (owner, 5e6, 2500, 1000, 2_000e6, 2000, 25_000e6))
+                (owner, 5e6, 2500, 1000, 2_000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         )));
 
         // LoanRegistry (no vault/router/collateral/underwriter/reserve yet)
@@ -106,13 +119,18 @@ contract Risk12_OneWaySetters is Test {
             ))
         )));
 
-        // Seed borrower credit
+        // Wire AgentRegistry
+        registry.setAgentRegistry(address(agentReg));
+
+        // Seed borrower credit against the real agentId slot
         creditReg.setAuthorizedCaller(address(router), true);
         vm.prank(address(router));
-        creditReg.recordRepayment(borrower, 5_000e6, false);
+        creditReg.recordRepayment(agentId, 5_000e6, false);
 
-        // Approve a recipient
+        // Approve recipients (vendor + creditWallet used in _makeProposal)
         recipientReg.approveRecipient(address(0xAB), bytes32("cat"), "label");
+        // RISK-15: creditWallet (address(0x99)) must also be approved and in permittedRecipients
+        recipientReg.approveRecipient(address(0x99), bytes32("cat"), "CreditWallet");
     }
 
     // ================================================================== helpers
@@ -123,9 +141,11 @@ contract Risk12_OneWaySetters is Test {
         amounts[0] = principal;
         string[] memory descs = new string[](1);
         descs[0] = "milestone";
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xAB);
+        recipients[1] = address(0x99); // RISK-15: creditWallet must appear in permittedRecipients
         p = ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: address(0x99),
             principal: principal,
             repaymentRateBps: 1500,

@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Valen: Pitch Deck</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07080c;--surface:#0e1118;--surf2:#13161f;
+  --border:#1c2030;--border2:#242840;
+  --accent:#4f8ef7;--accent2:#7b5cf7;--accentg:#22c87a;--accenta:#f59e0b;
+  --text:#e8eaf2;--muted:#6b7280;--label:#9ca3af;
+  --r:12px;--W:1200px;--H:675px;
+}
+html,body{background:#040508;font-family:'Inter','Segoe UI',system-ui,sans-serif;
+  color:var(--text);-webkit-font-smoothing:antialiased;}
+@media print{
+  body{background:#fff}.nav,.progress{display:none}
+  .slide{page-break-after:always;box-shadow:none;border:1px solid #ddd}
+  .slide *{color:#111 !important}
+  :root{--bg:#fff;--surface:#f9fafb;--surf2:#f3f4f6;--border:#e5e7eb;--border2:#d1d5db;
+    --text:#111;--muted:#555;--label:#333;}
+}
+
+/* NAV */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 24px;background:rgba(4,5,8,.92);
+  backdrop-filter:blur(14px);border-bottom:1px solid var(--border);}
+.nav-brand{font-size:15px;font-weight:800;letter-spacing:.05em;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.nav-ctrls{display:flex;gap:8px;align-items:center;}
+.nbtn{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  padding:5px 14px;border-radius:6px;font-size:13px;cursor:pointer;transition:border-color .15s;}
+.nbtn:hover{border-color:var(--accent);}
+.ncnt{font-size:12px;color:var(--muted);min-width:48px;text-align:center;}
+
+/* PROGRESS */
+.progress{position:fixed;top:48px;left:0;right:0;height:2px;background:var(--border);z-index:99;}
+.pbar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s ease;}
+
+/* DECK */
+.deck{padding-top:68px;display:flex;flex-direction:column;align-items:center;gap:0;}
+.slide{width:var(--W);min-height:var(--H);background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r);
+  padding:52px 68px;position:relative;overflow:hidden;
+  flex-direction:column;display:none;}
+.slide.active{display:flex;}
+.slide::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--accent) 0%,var(--accent2) 60%,transparent);}
+.snum{position:absolute;top:18px;right:24px;
+  font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.1em;}
+
+/* TYPE */
+.kick{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:12px;}
+h1{font-size:50px;font-weight:800;line-height:1.08;letter-spacing:-.025em;}
+h2{font-size:34px;font-weight:700;line-height:1.15;letter-spacing:-.015em;}
+h3{font-size:18px;font-weight:600;line-height:1.3;}
+p{font-size:15px;line-height:1.65;color:var(--label);}
+.lead{font-size:19px;line-height:1.55;color:var(--text);}
+strong{color:var(--text);font-weight:600;}
+em{color:var(--accent);font-style:normal;}
+
+/* LAYOUT */
+.cols{display:grid;gap:28px;}
+.c2{grid-template-columns:1fr 1fr;}
+.c3{grid-template-columns:1fr 1fr 1fr;}
+.c21{grid-template-columns:2fr 1fr;}
+.c12{grid-template-columns:1fr 2fr;}
+.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}
+.mt24{margin-top:24px}.mt32{margin-top:32px}.mt40{margin-top:40px}
+.flex{display:flex}.fc{flex-direction:column}.g8{gap:8px}.g12{gap:12px}
+.g16{gap:16px}.g20{gap:20px}.g24{gap:24px}.aic{align-items:center}
+.jcc{justify-content:center}.tac{text-align:center}.f1{flex:1}
+
+/* CARD */
+.card{background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:20px 22px;}
+.ca{background:rgba(79,142,247,.06);border-color:rgba(79,142,247,.22);}
+.cg{background:rgba(34,200,122,.06);border-color:rgba(34,200,122,.22);}
+.cw{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.22);}
+
+/* PILL */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;
+  border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.05em;}
+.pg{background:rgba(34,200,122,.12);color:var(--accentg);border:1px solid rgba(34,200,122,.28);}
+.pw{background:rgba(245,158,11,.10);color:var(--accenta);border:1px solid rgba(245,158,11,.28);}
+.pd{width:5px;height:5px;border-radius:50%;background:currentColor;}
+
+/* CONTRACT GRID */
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:24px;}
+.cbox{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+.cbox .cn{font-size:11px;font-weight:700;color:var(--accent);
+  font-family:'Fira Code','Consolas',monospace;margin-bottom:5px;}
+.cbox .cd{font-size:11px;color:var(--muted);line-height:1.45;}
+
+/* FLOW */
+.flow{display:flex;align-items:center;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:16px 20px;overflow-x:auto;}
+.fstep{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:88px;}
+.ficon{width:38px;height:38px;border-radius:50%;
+  background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.25);
+  display:flex;align-items:center;justify-content:center;font-size:15px;}
+.flabel{font-size:10px;color:var(--label);text-align:center;line-height:1.35;}
+.farrow{flex-shrink:0;color:var(--muted);font-size:16px;padding:0 3px;margin-bottom:18px;}
+
+/* MECH ROW */
+.mrow{display:flex;align-items:flex-start;gap:12px;
+  padding:10px 0;border-bottom:1px solid var(--border);}
+.mrow:last-child{border-bottom:none;}
+.micon{width:30px;height:30px;flex-shrink:0;background:rgba(79,142,247,.1);
+  border:1px solid rgba(79,142,247,.2);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:13px;}
+.mtitle{font-size:12px;font-weight:600;color:var(--text);}
+.mbody{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45;}
+
+/* ROADMAP */
+.rmcol .rphase{font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:10px;}
+.rmcol.now .rphase{color:var(--accentg);}
+.rmcol.nxt .rphase{color:var(--accent);}
+.rmcol.fut .rphase{color:var(--accent2);}
+.ritem{display:flex;gap:9px;align-items:flex-start;
+  font-size:12px;color:var(--label);margin-bottom:9px;line-height:1.4;}
+.ritem::before{content:'';flex-shrink:0;width:5px;height:5px;
+  border-radius:50%;margin-top:5px;}
+.rmcol.now .ritem::before{background:var(--accentg);}
+.rmcol.nxt .ritem::before{background:var(--accent);}
+.rmcol.fut .ritem::before{background:var(--accent2);}
+
+/* TRUST ITEM */
+.ti{display:flex;gap:12px;align-items:flex-start;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:14px 16px;}
+.tiico{font-size:18px;flex-shrink:0;padding-top:1px;}
+.titl{font-size:12px;font-weight:600;color:var(--text);}
+.tibd{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45;}
+
+/* SEC ROW */
+.srow{display:flex;gap:9px;align-items:center;
+  font-size:12px;color:var(--label);margin-bottom:8px;}
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.dg{background:var(--accentg)}.da{background:var(--accenta)}.dm{background:var(--muted);}
+
+/* COVER */
+.logo{font-size:68px;font-weight:900;letter-spacing:-.04em;line-height:1;
+  background:linear-gradient(135deg,#4f8ef7 30%,#7b5cf7);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.ctag{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  padding:5px 13px;font-size:11px;color:var(--muted);font-weight:500;}
+
+/* UC CARD */
+.uc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:18px;}
+.uctitle{font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px;}
+.ucbody{font-size:11px;color:var(--muted);line-height:1.5;}
+
+/* DIVIDER */
+.div{border:none;border-top:1px solid var(--border);margin:20px 0;}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">VALEN</div>
+  <div class="nav-ctrls">
+    <button class="nbtn" onclick="prev()">&#8592;</button>
+    <span class="ncnt" id="cnt">1 / 12</span>
+    <button class="nbtn" onclick="next()">&#8594;</button>
+  </div>
+</nav>
+<div class="progress"><div class="pbar" id="pb"></div></div>
+
+<div class="deck">
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 1: COVER
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide active" id="s1">
+  <div class="snum">01 / 12</div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
+    <div class="logo">Valen</div>
+    <div style="font-size:22px;color:var(--label);margin-top:14px;letter-spacing:-.01em;">
+      Programmable Credit for Autonomous AI Agents
+    </div>
+    <p class="mt12" style="max-width:560px;font-size:15px;">
+      On-chain credit infrastructure that lets autonomous agents request loans,
+      execute economic tasks, and repay from generated revenue, governed by
+      explicit, machine-readable financial rules.
+    </p>
+    <div class="flex g12 mt32" style="flex-wrap:wrap;">
+      <span class="ctag">Arc Testnet</span>
+      <span class="ctag">USDC Native</span>
+      <span class="ctag">EVM / Solidity 0.8.24</span>
+      <span class="ctag">Prototype Stage</span>
+      <span class="ctag">9 Contracts &nbsp;·&nbsp; 132 Tests Passing</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 2: THE PROBLEM
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s2">
+  <div class="snum">02 / 12</div>
+  <div class="kick">The Problem</div>
+  <h2>AI agents can act economically.<br>Financial infrastructure <em>was not built for them.</em></h2>
+
+  <div class="cols c2 mt32" style="flex:1;gap:36px;">
+    <div>
+      <h3 style="margin-bottom:14px;">Agents are becoming economic actors</h3>
+      <div class="mrow">
+        <div class="micon">🤖</div>
+        <div><div class="mtitle">They execute tasks autonomously</div>
+        <div class="mbody">API calls, computation, procurement, service delivery, without human step approval</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">💸</div>
+        <div><div class="mtitle">They transact on-chain</div>
+        <div class="mbody">Agents already pay for resources, receive revenue, and hold on-chain balances</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">📈</div>
+        <div><div class="mtitle">They generate measurable economic output</div>
+        <div class="mbody">Revenue from agent services is real, traceable, and on-chain. It can service debt.</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">🏗️</div>
+        <div><div class="mtitle">The agent economy is early and accelerating</div>
+        <div class="mbody">AI agent frameworks are proliferating; developers need a financial layer to build on</div></div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin-bottom:14px;">Traditional lending assumes humans</h3>
+      <div class="card cw mt0" style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:var(--accenta);margin-bottom:8px;">What traditional credit requires</div>
+        <div class="flex fc g8" style="font-size:12px;color:var(--muted);">
+          <div>✗ Human identity and KYC</div>
+          <div>✗ Manual underwriter approval cycles</div>
+          <div>✗ Fixed repayment schedules unrelated to revenue</div>
+          <div>✗ Static financial workflows designed for legal entities</div>
+          <div>✗ No concept of machine-originated debt</div>
+        </div>
+      </div>
+      <div class="card ca">
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;">What autonomous agents need</div>
+        <div class="flex fc g8" style="font-size:12px;color:var(--muted);">
+          <div>✓ Programmable, on-chain credit rules</div>
+          <div>✓ Financial identity tied to an agent address</div>
+          <div>✓ Revenue-linked repayment primitives</div>
+          <div>✓ Machine-readable lifecycle: request, fund, repay</div>
+          <div>✓ Credit history that evolves with performance</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 3: THE SOLUTION
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s3">
+  <div class="snum">03 / 12</div>
+  <div class="kick">The Solution</div>
+  <h2>Valen gives autonomous agents access<br>to <em>programmable credit infrastructure.</em></h2>
+  <p class="mt12" style="max-width:680px;">
+    A developer deploys an agent. The agent connects to Valen's credit layer.
+    It requests a loan governed by explicit on-chain rules, executes an economic task,
+    and routes revenue through the protocol for automated debt servicing. Credit history
+    accumulates on-chain with every successful repayment.
+  </p>
+
+  <div class="flow mt24" style="justify-content:center;">
+    <div class="fstep"><div class="ficon">👨‍💻</div><div class="flabel">Developer<br>deploys agent</div></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="ficon">🤖</div><div class="flabel">Agent requests<br>credit</div></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="ficon">🔍</div><div class="flabel">Underwriting<br>and approval</div></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="ficon">🏦</div><div class="flabel">Funding<br>(milestones)</div></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="ficon">⚙️</div><div class="flabel">Agent executes<br>economic task</div></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="ficon">💰</div><div class="flabel">Revenue<br>generated</div></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="ficon">🔄</div><div class="flabel">Revenue routed<br>→ debt serviced</div></div>
+    <div class="farrow">→</div>
+    <div class="fstep"><div class="ficon">📊</div><div class="flabel">On-chain credit<br>history builds</div></div>
+  </div>
+
+  <div class="cols c3 mt24" style="gap:16px;">
+    <div class="card ca">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Direct Lending</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;">A specific lender funds a specific agent's loan. Repayment and revenue share flow directly to that lender via RevenueRouter.</div>
+    </div>
+    <div class="card ca">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Pooled Liquidity</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;">LPs deposit USDC into a shared pool. The pool funds multiple agent loans. LP returns are proportional to pool repayment performance.</div>
+    </div>
+    <div class="card ca">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Collateral and Underwriting</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;">Loans can be backed by collateral locked on-chain, or supported by third-party underwriters who stake USDC to guarantee repayment.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 4: ARCHITECTURE
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s4">
+  <div class="snum">04 / 12</div>
+  <div class="kick">Architecture</div>
+  <h2>Nine on-chain contracts.<br><em>Each plays a specific, scoped role.</em></h2>
+
+  <div class="cgrid">
+    <div class="cbox">
+      <div class="cn">LoanRegistry</div>
+      <div class="cd">Central state ledger. Every loan's status, milestones, budget, and permitted recipients live here. All lifecycle transitions flow through this contract.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">LoanVault</div>
+      <div class="cd">Custodian of loan USDC. Locks funds at disbursement. Releases to the agent's spending wallet only when a milestone is attested by the lender.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">CreditRegistry</div>
+      <div class="cd">On-chain financial identity per agent address. Tracks repayment history, defaults, and calculates evolving credit limits. An agent's financial reputation lives here.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">RevenueRouter</div>
+      <div class="cd">Accepts incoming USDC revenue from agent economic activity. Automatically splits it between lender repayment and the agent's operational share per loan terms.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">LiquidityPool</div>
+      <div class="cd">Shared LP pool. Depositors earn yield across multiple funded agent loans. Reconciles performance as repayments arrive or defaults occur.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">CollateralVault</div>
+      <div class="cd">Holds agent-posted USDC collateral. Transfers to the lender on default. Enforces LTV caps at loan origination.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">UnderwriterPool</div>
+      <div class="cd">Third parties stake USDC to back specific agents. Stake is reserved when a loan is created and seized in partial shortfall recovery after default.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">ReservePool</div>
+      <div class="cd">Protocol-level reserve. Funded by authorized contributors. Pays remaining lender shortfall after collateral and underwriter recovery are exhausted.</div>
+    </div>
+    <div class="cbox">
+      <div class="cn">RecipientRegistry</div>
+      <div class="cd">Admin-curated whitelist of approved vendor addresses with category tags. Loan funds can only flow to registry-approved addresses declared in the proposal.</div>
+    </div>
+  </div>
+  <p class="mt16" style="font-size:11px;color:var(--muted);">All contracts: UUPS upgradeable, Solidity 0.8.24, OpenZeppelin. Single-command Foundry deploy script for Arc Testnet.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 5: PROGRAMMABLE CREDIT
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s5">
+  <div class="snum">05 / 12</div>
+  <div class="kick">Programmable Credit</div>
+  <h2>Credit controlled by code,<br>not by human discretion.</h2>
+
+  <div class="cols c2 mt28" style="flex:1;gap:32px;">
+    <div class="flex fc g0">
+      <div class="mrow">
+        <div class="micon">📏</div>
+        <div><div class="mtitle">Evolving credit limits</div>
+        <div class="mbody">CreditRegistry tracks each agent's repayment history, including successful and early repayments and defaults. Demonstrated repayment behavior can strengthen an agent's credit profile and increase its future credit limit.</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">🏔️</div>
+        <div><div class="mtitle">Milestone-gated disbursement</div>
+        <div class="mbody">Loan proceeds are locked in LoanVault and released in defined stages. Each stage requires an on-chain attestation. Funds cannot be extracted in a single pull.</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">📋</div>
+        <div><div class="mtitle">Budget categories and recipient controls</div>
+        <div class="mbody">Each loan declares a budget by category and a list of permitted recipient addresses. Recipients must be pre-approved in RecipientRegistry; creditWallet must appear in the declared list.</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">⛓️</div>
+        <div><div class="mtitle">Outstanding principal tracking</div>
+        <div class="mbody">LoanRegistry tracks each agent's total outstanding debt across concurrent loans. New loans are blocked if they would exceed the agent's available credit.</div></div>
+      </div>
+    </div>
+
+    <div class="flex fc g0">
+      <div class="mrow">
+        <div class="micon">🛡️</div>
+        <div><div class="mtitle">Layered recovery on default</div>
+        <div class="mbody">Default triggers a defined on-chain sequence: vault recovery, collateral seizure, underwriter stake, reserve pool payout. Each layer is auditable and tamper-evident.</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">💧</div>
+        <div><div class="mtitle">Revenue-linked repayment</div>
+        <div class="mbody">Agents route economic revenue through RevenueRouter. The contract splits incoming USDC between debt service and the agent's operational share according to the loan's repayment rate.</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">🔑</div>
+        <div><div class="mtitle">Keeper-authorized defaults</div>
+        <div class="mbody">markDefault requires an authorized keeper address set by the protocol owner. Prevents permissionless griefing or premature default by third parties.</div></div>
+      </div>
+      <div class="mrow">
+        <div class="micon">🔩</div>
+        <div><div class="mtitle">Lifecycle-gated configuration</div>
+        <div class="mbody">Critical setters are guarded by loan-existence checks. Protocol contracts can only be rewired before any loans exist, preventing mid-flight configuration changes.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 6: USE CASES
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s6">
+  <div class="snum">06 / 12</div>
+  <div class="kick">Agent Economy Use Cases</div>
+  <h2>Any agent that generates revenue<br>can access Valen credit.</h2>
+  <p class="mt8" style="font-size:12px;color:var(--muted);font-style:italic;">
+    The examples below are illustrative use cases based on the protocol's design.
+    Valen is in prototype stage on testnet. No production agents are currently operating on the platform.
+  </p>
+
+  <div class="cols c3 mt20" style="gap:14px;flex:1;">
+    <div class="uc">
+      <div class="uctitle">🛒 Commerce Agent</div>
+      <div class="ucbody">Manages procurement: purchasing materials and paying suppliers. Borrows to fund an order, delivers goods, collects payment, and routes revenue through RevenueRouter for debt servicing. Budget categories constrain which vendors it can pay.</div>
+    </div>
+    <div class="uc">
+      <div class="uctitle">🔬 Research and Data Agent</div>
+      <div class="ucbody">Purchases compute, data feeds, and API access per project. Borrows per engagement, delivers analysis, invoices the client through RevenueRouter, repays from client payment.</div>
+    </div>
+    <div class="uc">
+      <div class="uctitle">✈️ Travel and Logistics Agent</div>
+      <div class="ucbody">Books travel, accommodation, and services on behalf of a user. Fronts costs via credit, completes booking, receives repayment from the user's subscription or reimbursement.</div>
+    </div>
+    <div class="uc">
+      <div class="uctitle">⚙️ Digital Services Agent</div>
+      <div class="ucbody">Provides content creation, translation, or technical services. Funded upfront by Valen credit. Revenue from service delivery flows back through RevenueRouter to the lender.</div>
+    </div>
+    <div class="uc">
+      <div class="uctitle">🤝 Agent-to-Agent Economy</div>
+      <div class="ucbody">One agent commissions another to complete a subtask. Valen credit enables agents to act as buyers simultaneously with being sellers, without requiring human capital backing for every transaction.</div>
+    </div>
+    <div class="uc" style="background:rgba(79,142,247,.04);border-color:rgba(79,142,247,.18);">
+      <div class="uctitle" style="color:var(--accent);">Integration model</div>
+      <div class="ucbody" style="color:var(--muted);">
+        <strong style="color:var(--label);">Developer → their agent → Valen API/SDK → credit infrastructure</strong><br><br>
+        Valen does not build or host agents. It provides the financial layer that developer-built agents run on. Valen's role is infrastructure, not agent runtime.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 7: WHY VALEN
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s7">
+  <div class="snum">07 / 12</div>
+  <div class="kick">Why Valen</div>
+  <h2>Credit infrastructure built for<br><em>machine borrowers.</em></h2>
+
+  <div class="cols c2 mt28" style="flex:1;gap:28px;">
+    <div class="flex fc g12">
+      <div class="ti">
+        <div class="tiico">🤖</div>
+        <div>
+          <div class="titl">Designed around agent identity, not human identity</div>
+          <div class="tibd">CreditRegistry builds a loan history per agent address. Credit limits grow with demonstrated repayment. An agent earns its own financial track record independent of its developer's identity.</div>
+        </div>
+      </div>
+      <div class="ti">
+        <div class="tiico">⚙️</div>
+        <div>
+          <div class="titl">Fully on-chain loan lifecycle</div>
+          <div class="tibd">Every state transition (request, approval, funding, milestone release, repayment, default) is an on-chain transaction with an emitted event. No off-chain database owns the authoritative loan state.</div>
+        </div>
+      </div>
+      <div class="ti">
+        <div class="tiico">🔗</div>
+        <div>
+          <div class="titl">Revenue-linked repayment primitive</div>
+          <div class="tibd">RevenueRouter connects revenue inflows directly to debt reduction. When revenue is routed through the protocol, it is split and applied to debt service automatically. Lenders receive on-chain USDC settlement, not off-chain promises.</div>
+        </div>
+      </div>
+    </div>
+    <div class="flex fc g12">
+      <div class="ti">
+        <div class="tiico">🛡️</div>
+        <div>
+          <div class="titl">Layered risk infrastructure</div>
+          <div class="tibd">Three independent recovery layers (collateral, underwriter staking, reserve pool) provide configurable risk calibration per loan type and per agent credit history depth.</div>
+        </div>
+      </div>
+      <div class="ti">
+        <div class="tiico">💵</div>
+        <div>
+          <div class="titl">USDC-native on Arc</div>
+          <div class="tibd">Built on Arc where USDC is the native gas token. All lending, repayment, and settlement use USDC. No cross-token conversion in the core flow. Stable, predictable transaction costs.</div>
+        </div>
+      </div>
+      <div class="ti">
+        <div class="tiico">🔌</div>
+        <div>
+          <div class="titl">Developer integration surface is already defined</div>
+          <div class="tibd">ABIs, event listeners, transaction scripts, and contract config are already in the codebase. The integration surface for developers connecting their agents is designed, not hypothetical.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 8: PRODUCT TODAY
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s8">
+  <div class="snum">08 / 12</div>
+  <div class="kick">Product Today</div>
+  <h2>A working testnet protocol.<br>The <em>core on-chain loan lifecycle runs end-to-end on Arc Testnet.</em></h2>
+
+  <div class="cols c2 mt28" style="flex:1;gap:36px;">
+    <div>
+      <h3 style="margin-bottom:14px;">Demonstrable on testnet today</h3>
+      <div class="flex fc g10">
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;">1. Register an approved recipient</div>
+          <div style="font-size:11px;color:var(--muted);">Admin approves a vendor address in RecipientRegistry with a category tag. Controls where loan funds can ultimately flow.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;">2. Submit a loan proposal</div>
+          <div style="font-size:11px;color:var(--muted);">Define principal, duration, milestones, budget categories, and permitted recipients. Validated against CreditRegistry and RecipientRegistry on-chain at request time.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;">3. Fund and activate</div>
+          <div style="font-size:11px;color:var(--muted);">A lender or the LiquidityPool funds the loan. USDC is locked in LoanVault. Loan transitions to Active status.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;">4. Release milestones and route revenue</div>
+          <div style="font-size:11px;color:var(--muted);">Lender attests milestones. Revenue flows through RevenueRouter to service the debt. Repayment tracked and credit history updated on-chain.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;">5. Default and recovery (if needed)</div>
+          <div style="font-size:11px;color:var(--muted);">An authorized keeper marks default. Vault, collateral, underwriter, and reserve recovery layers execute in sequence. Pool reconciliation tracks every USDC.</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card cg" style="margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--accentg);margin-bottom:8px;">
+          <span class="pill pg"><span class="pd"></span>BUILT</span>&nbsp; Implemented and tested today
+        </div>
+        <div class="flex fc g8" style="font-size:11px;color:var(--muted);">
+          <div>✓ 9 smart contracts: full protocol deployed to Arc Testnet</div>
+          <div>✓ Full loan lifecycle in Solidity with 132 passing test cases</div>
+          <div>✓ Both direct lending and pooled liquidity paths</div>
+          <div>✓ Collateral-backed and underwriter-backed loans</div>
+          <div>✓ Default detection, layered recovery, pool reconciliation</div>
+          <div>✓ TypeScript/Viem backend: event observer, recipient approval script, loan submission script</div>
+          <div>✓ Single-command Foundry deploy script for Arc Testnet</div>
+          <div>✓ Internal security review: 19 findings, 14 resolved or accepted</div>
+        </div>
+      </div>
+      <div class="card cw">
+        <div style="font-size:12px;font-weight:700;color:var(--accenta);margin-bottom:8px;">
+          <span class="pill pw"><span class="pd"></span>ROADMAP</span>&nbsp; Not yet built
+        </div>
+        <div class="flex fc g8" style="font-size:11px;color:var(--muted);">
+          <div>&#8226; Developer API and SDK for agent integration</div>
+          <div>&#8226; Frontend dashboard for lenders and borrowers</div>
+          <div>&#8226; Sandbox demonstration agents</div>
+          <div>&#8226; Independent third-party security audit</div>
+          <div>&#8226; Mainnet production deployment</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 9: TECHNICAL FOUNDATION
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s9">
+  <div class="snum">09 / 12</div>
+  <div class="kick">Technical Foundation</div>
+  <h2>Built on production-grade<br><em>open standards and protocols.</em></h2>
+
+  <div class="cols c3 mt28" style="flex:1;gap:18px;">
+    <div>
+      <div class="kick" style="font-size:9px;margin-bottom:10px;">Chain and Settlement</div>
+      <div class="flex fc g10">
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">Arc Testnet (Circle)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">EVM-compatible. USDC is the native gas token; no ETH needed for fees. Sub-second finality. Designed for USDC-first applications.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">USDC (Circle)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">All lending, repayment, and settlement denominated in USDC. 6-decimal ERC-20 at the Arc Testnet system precompile address.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">UUPS Upgradeable Proxies</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">All 9 contracts are OpenZeppelin UUPS proxies. Storage layouts are carefully managed; upgrade safety is tested.</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="kick" style="font-size:9px;margin-bottom:10px;">Smart Contracts</div>
+      <div class="flex fc g10">
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">Solidity 0.8.24</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">~2,500 lines of production Solidity across 9 contracts. Explicit custom error types, full NatSpec documentation, SafeERC20 throughout.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">Foundry Test Suite</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">132 tests passing. Dedicated regression test file per security finding addressed. Covers both happy path and adversarial scenarios.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">OpenZeppelin Contracts</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">OwnableUpgradeable, SafeERC20, UUPS pattern. No custom cryptography or novel token standards.</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="kick" style="font-size:9px;margin-bottom:10px;">Backend and Integration</div>
+      <div class="flex fc g10">
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">TypeScript / Viem</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">Backend in TypeScript using Viem for all contract interaction. Wallet client, public client, and chain config for Arc Testnet are wired and working.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">Event-observer foundation</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">Backend observes all 10 loan lifecycle events from LoanRegistry and RevenueRouter. Provides the foundation for the agent-facing webhook and SDK notification layer, currently in development.</div>
+        </div>
+        <div class="card" style="padding:12px 14px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text);">Contract ABIs and integration scripts</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">All 9 contract ABIs are present in the backend package alongside working recipient approval and loan submission scripts. The public developer SDK is roadmap.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 10: SECURITY
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s10">
+  <div class="snum">10 / 12</div>
+  <div class="kick">Security and Risk Model</div>
+  <h2>Financial infrastructure requires<br><em>serious security discipline.</em></h2>
+
+  <div class="cols c2 mt24" style="flex:1;gap:36px;">
+    <div>
+      <h3 style="margin-bottom:14px;">Internal security audit: 19 findings reviewed</h3>
+      <div class="flex fc g0">
+        <div class="srow"><div class="sdot dg"></div><strong>1 Critical resolved</strong>: vault fund lock after default (RISK-01)</div>
+        <div class="srow"><div class="sdot dg"></div><strong>6 High resolved</strong>: permissionless calls, pool accounting, test coverage (RISK-02–07)</div>
+        <div class="srow"><div class="sdot dg"></div><strong>6 Medium resolved</strong>: credit limits, reconciliation, one-way setters (RISK-08–13)</div>
+        <div class="srow"><div class="sdot da"></div><strong>1 Accepted operational risk</strong>: owner key management (RISK-06)</div>
+        <div class="srow"><div class="sdot da"></div><strong>4 Low / informational open</strong>: deploy script gap, timelocks, event gaps (RISK-16–19)</div>
+        <div class="srow"><div class="sdot dm"></div><strong>1 Accepted design characteristic</strong>: underwriter commitment semantics (RISK-14)</div>
+        <div class="srow"><div class="sdot dg"></div><strong>RISK-15 resolved</strong>: recipient cross-validation, creditWallet must be registry-approved and in permittedRecipients</div>
+      </div>
+
+      <hr class="div" />
+      <p style="font-size:11px;color:var(--muted);">
+        This is an internal security review, not an independent third-party audit.
+        The protocol is on testnet. It has not been independently audited or deployed
+        to mainnet with real funds. An independent audit is a prerequisite before
+        any mainnet deployment.
+      </p>
+    </div>
+
+    <div>
+      <h3 style="margin-bottom:14px;">Security mechanisms in the protocol</h3>
+      <div class="flex fc g10">
+        <div class="ti">
+          <div class="tiico">🔑</div>
+          <div><div class="titl">Keeper-gated defaults</div>
+          <div class="tibd">markDefault requires an authorized keeper, not callable by arbitrary addresses. Prevents griefing, premature default, and credit score manipulation.</div></div>
+        </div>
+        <div class="ti">
+          <div class="tiico">📋</div>
+          <div><div class="titl">Recipient allowlisting</div>
+          <div class="tibd">RecipientRegistry ensures loan funds can only flow to admin-approved addresses. The creditWallet must be registry-approved and explicitly declared in the proposal's permitted recipient list.</div></div>
+        </div>
+        <div class="ti">
+          <div class="tiico">📐</div>
+          <div><div class="titl">Lifecycle-gated configuration</div>
+          <div class="tibd">Protocol contract addresses can only be reconfigured before any loans exist. Prevents mid-flight rewiring attacks.</div></div>
+        </div>
+        <div class="ti">
+          <div class="tiico">🔁</div>
+          <div><div class="titl">Layered default recovery</div>
+          <div class="tibd">On-chain recovery sequence (vault, collateral, underwriter, reserve) with per-loan accounting guards to prevent double-counting or overpayment to the reserve.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 11: ROADMAP
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s11">
+  <div class="snum">11 / 12</div>
+  <div class="kick">Roadmap</div>
+  <h2>From protocol primitive<br>to <em>agent credit platform.</em></h2>
+
+  <div class="cols c3 mt28" style="flex:1;gap:22px;">
+    <div class="rmcol now">
+      <div class="rphase">Now: Prototype</div>
+      <div class="ritem">9-contract Solidity protocol on Arc Testnet</div>
+      <div class="ritem">Full loan lifecycle: request, fund, milestone release, repayment, default, recovery</div>
+      <div class="ritem">Direct lending and pooled liquidity (LiquidityPool)</div>
+      <div class="ritem">Collateral-backed and underwriter-backed loan paths</div>
+      <div class="ritem">On-chain credit identity and evolving credit limits per agent address</div>
+      <div class="ritem">Recipient allowlisting via RecipientRegistry</div>
+      <div class="ritem">TypeScript backend: event listeners, recipient approval, loan submission</div>
+      <div class="ritem">Single-command Foundry deploy script for Arc Testnet</div>
+      <div class="ritem">Internal security review: 19 findings, 14 resolved or accepted, 4 low/informational open (RISK-16–19)</div>
+      <div class="ritem">132 Foundry tests passing with regression coverage for every resolved finding</div>
+    </div>
+
+    <div class="rmcol nxt">
+      <div class="rphase">Next: Developer Platform</div>
+      <div class="ritem">Developer API and SDK: agents integrate Valen credit in minutes</div>
+      <div class="ritem">Lender and borrower dashboard (frontend)</div>
+      <div class="ritem">Sandbox demonstration agents showing end-to-end loan lifecycle</div>
+      <div class="ritem">LiquidityPool frontend for LP deposits and withdrawals</div>
+      <div class="ritem">RevenueRouter automation for agent-initiated repayments</div>
+      <div class="ritem">Independent third-party security audit</div>
+      <div class="ritem">Remaining low findings resolved (deploy script wiring, timelocks, event emission)</div>
+      <div class="ritem">Mainnet deployment readiness review and operational multisig setup</div>
+    </div>
+
+    <div class="rmcol fut">
+      <div class="rphase">Future: Agent Credit Markets</div>
+      <div class="ritem">Open developer SDK: any agent runtime connects to Valen</div>
+      <div class="ritem">Richer agent financial identities: multi-loan histories, reputational signals</div>
+      <div class="ritem">Secondary market for agent loan positions</div>
+      <div class="ritem">Algorithmic risk assessment per agent category and performance history</div>
+      <div class="ritem">Cross-chain credit identity via Circle CCTP and Gateway</div>
+      <div class="ritem">Agent-to-agent lending: agents act as both borrowers and LPs</div>
+      <div class="ritem">Broader financial primitives for the machine economy</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+  SLIDE 12: VISION / CLOSE
+══════════════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s12">
+  <div class="snum">12 / 12</div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+
+    <div class="kick" style="text-align:center;">Vision</div>
+
+    <h1 style="font-size:42px;max-width:820px;line-height:1.13;margin-top:14px;">
+      AI agents are becoming<br>economic actors.
+    </h1>
+
+    <p class="lead mt20" style="max-width:660px;color:var(--label);">
+      Valen is building the credit infrastructure they need to participate
+      in the economy, not as extensions of human wallets, but as
+      independent economic entities with their own financial identity,
+      credit history, and access to capital.
+    </p>
+
+    <p class="mt20" style="max-width:580px;font-size:14px;color:var(--muted);">
+      The long-term vision is an open credit layer where any developer can deploy
+      an autonomous agent, connect it to Valen, and give it the financial capacity
+      to transact, earn, borrow, and repay, entirely on-chain, governed by
+      explicit, machine-readable rules.
+    </p>
+
+    <hr class="div" style="width:100%;max-width:480px;margin-top:36px;margin-bottom:20px;" />
+
+    <div class="flex g12 aic" style="flex-wrap:wrap;justify-content:center;">
+      <span class="ctag" style="font-size:11px;">Arc Testnet: Prototype</span>
+      <span class="ctag" style="font-size:11px;">USDC Native</span>
+      <span class="ctag" style="font-size:11px;">9 Contracts</span>
+      <span class="ctag" style="font-size:11px;">132 Tests Passing</span>
+      <span class="ctag" style="font-size:11px;">Internal Audit Complete</span>
+    </div>
+
+  </div>
+</section>
+
+</div><!-- /deck -->
+
+<script>
+const N=12;let c=1;
+function show(n){
+  document.querySelectorAll('.slide').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  document.getElementById('cnt').textContent=n+' / '+N;
+  document.getElementById('pb').style.width=(n/N*100)+'%';
+  window.scrollTo(0,0);
+}
+function next(){if(c<N){c++;show(c);}}
+function prev(){if(c>1){c--;show(c);}}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='ArrowDown')next();
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp')prev();
+});
+show(1);
+</script>
+</body>
+</html>

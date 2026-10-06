@@ -24,6 +24,7 @@ import {RecipientRegistry}  from "../src/RecipientRegistry.sol";
 import {ReservePool}        from "../src/ReservePool.sol";
 import {LiquidityPool}      from "../src/LiquidityPool.sol";
 import {ILoanRegistry}      from "../src/interfaces/ILoanRegistry.sol";
+import {AgentRegistry}      from "../src/AgentRegistry.sol";
 import {ERC20}              from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockUSDC_R10 is ERC20 {
@@ -33,6 +34,7 @@ contract MockUSDC_R10 is ERC20 {
 
 contract Risk10_ActiveLoanCapTest is Test {
 
+    AgentRegistry     agentReg;
     LoanRegistry      registry;
     LoanVault         vault;
     CreditRegistry    creditReg;
@@ -72,10 +74,17 @@ contract Risk10_ActiveLoanCapTest is Test {
     function setUp() public {
         usdc = new MockUSDC_R10();
 
+        // AgentRegistry — deployed first so registry.setAgentRegistry can be called later.
+        // Each unique borrower is registered lazily inside _registerAndSeed().
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+
         creditReg = CreditRegistry(_proxy(
             address(new CreditRegistry()),
             abi.encodeCall(CreditRegistry.initialize,
-                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6))
+                (owner, 5e6, 2500, 1000, 2_000_000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         ));
 
         registry = LoanRegistry(_proxy(
@@ -139,6 +148,7 @@ contract Risk10_ActiveLoanCapTest is Test {
         registry.setUnderwriterPool(address(uwPool));
         registry.setRecipientRegistry(address(recipReg));
         registry.setReservePool(address(reserve));
+        registry.setAgentRegistry(address(agentReg));
         vault.setLiquidityPool(address(pool));
         creditReg.setAuthorizedCaller(address(registry), true);
         creditReg.setAuthorizedCaller(address(router), true);
@@ -161,14 +171,14 @@ contract Risk10_ActiveLoanCapTest is Test {
     // Helpers
     // ---------------------------------------------------------------
 
-    /// @dev Build a LoanProposal. borrower = msg.sender in requestLoan;
-    ///      lender is set by markFunded during fund*.
-    function _proposal(address /*unused*/) internal view returns (ILoanRegistry.LoanProposal memory) {
+    /// @dev Build a LoanProposal for a specific agentId and creditWallet.
+    ///      Each borrower is their own creditWallet (primary registered wallet).
+    function _proposal(uint256 aid, address cw) internal view returns (ILoanRegistry.LoanProposal memory) {
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: PRINCIPAL});
 
         address[] memory recipients = new address[](1);
-        recipients[0] = creditWallet;
+        recipients[0] = cw;
 
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = PRINCIPAL;
@@ -176,7 +186,8 @@ contract Risk10_ActiveLoanCapTest is Test {
         descs[0] = "M0";
 
         return ILoanRegistry.LoanProposal({
-            creditWallet:          creditWallet,
+            agentId:               aid,
+            creditWallet:          cw,
             principal:             PRINCIPAL,
             repaymentRateBps:      RATE_BPS,
             totalRepaymentDue:     TOTAL_DUE,
@@ -192,33 +203,38 @@ contract Risk10_ActiveLoanCapTest is Test {
         });
     }
 
-    /// @dev Borrow address for sequential test loans.
-    ///      Returns a unique address for index i (0-based).
+    /// @dev Returns a unique borrower address for index i (0-based).
     function _borrower(uint256 i) internal pure returns (address) {
         return address(uint160(0xB0B0 + i));
     }
 
-    /// @dev Seed credit history for a borrower so they have borrowing capacity.
-    function _seedCredit(address b) internal {
+    /// @dev Register borrower b in AgentRegistry, approve b in RecipientRegistry,
+    ///      and seed credit against the resulting agentId. Returns agentId.
+    ///      b is used as its own creditWallet (it is already the primary registered wallet).
+    function _registerAndSeed(address b) internal returns (uint256 aid) {
+        vm.prank(b);
+        aid = agentReg.registerAgent(0);
+        // Approve borrower as a recipient (one-time per unique address).
+        recipReg.approveRecipient(b, keccak256("COMPUTE"), "BW");
         vm.prank(address(router));
-        creditReg.recordRepayment(b, 5_000e6, false);
+        creditReg.recordRepayment(aid, 5_000e6, false);
     }
 
     /// @dev Request and fund a pool loan for borrower at index i. Returns loanId.
     function _poolLoan(uint256 i) internal returns (uint256 loanId) {
-        address b = _borrower(i);
-        _seedCredit(b);
+        address b   = _borrower(i);
+        uint256 aid = _registerAndSeed(b);
         vm.prank(b);
-        loanId = registry.requestLoan(_proposal(b));
+        loanId = registry.requestLoan(_proposal(aid, b));
         vault.fundFromPool(loanId);
     }
 
     /// @dev Request and fund a direct-lender loan for borrower at index i. Returns loanId.
     function _directLoan(uint256 i) internal returns (uint256 loanId) {
-        address b = _borrower(i);
-        _seedCredit(b);
+        address b   = _borrower(i);
+        uint256 aid = _registerAndSeed(b);
         vm.prank(b);
-        loanId = registry.requestLoan(_proposal(b));
+        loanId = registry.requestLoan(_proposal(aid, b));
         vm.prank(directLender);
         vault.fundLoan(loanId);
     }
@@ -261,10 +277,10 @@ contract Risk10_ActiveLoanCapTest is Test {
         assertEq(pool.activeLoanCount(), 2);
 
         // Third pool loan -- fundFromPool must revert
-        address b2 = _borrower(2);
-        _seedCredit(b2);
+        address b2  = _borrower(2);
+        uint256 aid2 = _registerAndSeed(b2);
         vm.prank(b2);
-        uint256 pendingId = registry.requestLoan(_proposal(b2));
+        uint256 pendingId = registry.requestLoan(_proposal(aid2, b2));
 
         vm.expectRevert(LiquidityPool.TooManyActiveLoans.selector);
         vault.fundFromPool(pendingId);
@@ -321,10 +337,10 @@ contract Risk10_ActiveLoanCapTest is Test {
         _poolLoan(1);
 
         // Third loan prepared but blocked
-        address b2 = _borrower(2);
-        _seedCredit(b2);
+        address b2   = _borrower(2);
+        uint256 aid2 = _registerAndSeed(b2);
         vm.prank(b2);
-        uint256 pendingId = registry.requestLoan(_proposal(b2));
+        uint256 pendingId = registry.requestLoan(_proposal(aid2, b2));
 
         vm.expectRevert(LiquidityPool.TooManyActiveLoans.selector);
         vault.fundFromPool(pendingId);

@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {LoanRegistry} from "../src/LoanRegistry.sol";
 import {CreditRegistry} from "../src/CreditRegistry.sol";
 import {RevenueRouter} from "../src/RevenueRouter.sol";
@@ -20,6 +22,8 @@ contract MockUSDC4 is ERC20 {
 }
 
 contract ReservePoolTest is Test {
+    AgentRegistry agentReg;
+    uint256 agentId;
     LoanRegistry registry;
     CreditRegistry creditRegistry;
     RevenueRouter router;
@@ -45,9 +49,18 @@ contract ReservePoolTest is Test {
     function setUp() public {
         usdc = new MockUSDC4();
 
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, creditWallet);
+
         address creditRegistryProxy = Upgrades.deployUUPSProxy(
             "CreditRegistry.sol",
-            abi.encodeCall(CreditRegistry.initialize, (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6))
+            abi.encodeCall(CreditRegistry.initialize, (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         );
         creditRegistry = CreditRegistry(creditRegistryProxy);
 
@@ -81,20 +94,25 @@ contract ReservePoolTest is Test {
         registry.setContracts(vault, address(router));
         registry.setRecipientRegistry(address(recipientRegistry));
         registry.setReservePool(address(reserve));
+        registry.setAgentRegistry(address(agentReg));
+        router.setAgentRegistry(address(agentReg));
         creditRegistry.setAuthorizedCaller(address(router), true);
         creditRegistry.setAuthorizedCaller(address(registry), true);
         vm.prank(address(router));
-        creditRegistry.recordRepayment(borrower, 5_000e6, false);
+        creditRegistry.recordRepayment(agentId, 5_000e6, false);
         reserve.setAuthorizedContributor(address(router), true);
         router.setReservePool(address(reserve), RESERVE_BPS);
 
         recipientRegistry.approveRecipient(address(0xD00D), keccak256("COMPUTE"), "Test Provider");
+        // RISK-15: creditWallet must also be approved and in permittedRecipients
+        recipientRegistry.approveRecipient(creditWallet, keccak256("COMPUTE"), "CreditWallet");
 
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: principal});
 
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet; // RISK-15
 
         uint256[] memory milestoneAmounts = new uint256[](1);
         milestoneAmounts[0] = principal;
@@ -102,6 +120,7 @@ contract ReservePoolTest is Test {
         milestoneDescs[0] = "Full release";
 
         ILoanRegistry.LoanProposal memory proposal = ILoanRegistry.LoanProposal({
+            agentId: agentId,
             creditWallet: creditWallet,
             principal: principal,
             repaymentRateBps: repaymentRateBps,

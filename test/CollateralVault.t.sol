@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {LoanRegistry} from "../src/LoanRegistry.sol";
 import {CreditRegistry} from "../src/CreditRegistry.sol";
 import {RevenueRouter} from "../src/RevenueRouter.sol";
@@ -13,74 +15,94 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockUSDC2 is ERC20 {
     constructor() ERC20("Mock USDC", "USDC") {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
+    function mint(address to, uint256 amount) external { _mint(to, amount); }
 }
 
 contract CollateralVaultTest is Test {
-    LoanRegistry registry;
-    CreditRegistry creditRegistry;
-    RevenueRouter router;
-    CollateralVault vault;
+    AgentRegistry     agentReg;
+    LoanRegistry      registry;
+    CreditRegistry    creditRegistry;
+    RevenueRouter     router;
+    CollateralVault   vault;
     RecipientRegistry recipientRegistry;
     MockUSDC2 usdc;
 
-    address owner = address(this);
-    address loanVault = address(0xBEEF);
-    address borrower = address(0xB0B);
+    address owner        = address(this);
+    address loanVault    = address(0xBEEF);
+    address borrower     = address(0xB0B);
     address creditWallet = address(0xCAFE);
-    address lender = address(0x1E4DE4);
+    address lender       = address(0x1E4DE4);
 
-    uint256 principal = 1_000e6;
-    uint16 constant MAX_LTV_BPS = 6600;
-    uint256 constant DEFAULT_GRACE_PERIOD = 3 days;
+    uint256 agentId;
+    uint256 principal           = 1_000e6;
+    uint16  constant MAX_LTV_BPS = 6600;
+    uint256 constant DEFAULT_GRACE_PERIOD          = 3 days;
     uint256 constant COLLATERAL_APPROVAL_THRESHOLD = 10_000e6;
 
     function setUp() public {
         usdc = new MockUSDC2();
 
+        // ── AgentRegistry ──────────────────────────────────────────────────────
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, creditWallet);
+
+        // ── CreditRegistry ─────────────────────────────────────────────────────
         address creditRegistryProxy = Upgrades.deployUUPSProxy(
             "CreditRegistry.sol",
-            abi.encodeCall(CreditRegistry.initialize, (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6))
+            abi.encodeCall(CreditRegistry.initialize,
+                (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
         );
         creditRegistry = CreditRegistry(creditRegistryProxy);
 
+        // ── LoanRegistry ───────────────────────────────────────────────────────
         address registryProxy = Upgrades.deployUUPSProxy(
             "LoanRegistry.sol",
-            abi.encodeCall(
-                LoanRegistry.initialize,
-                (owner, address(creditRegistry), 1 days, 365 days, DEFAULT_GRACE_PERIOD, COLLATERAL_APPROVAL_THRESHOLD)
-            )
+            abi.encodeCall(LoanRegistry.initialize,
+                (owner, address(creditRegistry), 1 days, 365 days,
+                 DEFAULT_GRACE_PERIOD, COLLATERAL_APPROVAL_THRESHOLD))
         );
         registry = LoanRegistry(registryProxy);
 
+        // ── RevenueRouter ──────────────────────────────────────────────────────
         address routerProxy = Upgrades.deployUUPSProxy(
             "RevenueRouter.sol",
-            abi.encodeCall(RevenueRouter.initialize, (owner, address(registry), address(creditRegistry), address(usdc)))
+            abi.encodeCall(RevenueRouter.initialize,
+                (owner, address(registry), address(creditRegistry), address(usdc)))
         );
         router = RevenueRouter(routerProxy);
 
+        // ── CollateralVault ────────────────────────────────────────────────────
         address vaultProxy = Upgrades.deployUUPSProxy(
             "CollateralVault.sol",
-            abi.encodeCall(CollateralVault.initialize, (owner, address(usdc), address(registry), MAX_LTV_BPS))
+            abi.encodeCall(CollateralVault.initialize,
+                (owner, address(usdc), address(registry), MAX_LTV_BPS))
         );
         vault = CollateralVault(vaultProxy);
 
+        // ── RecipientRegistry ──────────────────────────────────────────────────
         address recipientRegistryProxy = Upgrades.deployUUPSProxy(
             "RecipientRegistry.sol",
             abi.encodeCall(RecipientRegistry.initialize, (owner))
         );
         recipientRegistry = RecipientRegistry(recipientRegistryProxy);
 
+        // ── Wire ───────────────────────────────────────────────────────────────
         registry.setContracts(loanVault, address(router));
         registry.setCollateralVault(address(vault));
         registry.setRecipientRegistry(address(recipientRegistry));
+        registry.setAgentRegistry(address(agentReg));
+        router.setAgentRegistry(address(agentReg));
         creditRegistry.setAuthorizedCaller(address(router), true);
         creditRegistry.setAuthorizedCaller(address(registry), true);
 
         recipientRegistry.approveRecipient(address(0xD00D), keccak256("COMPUTE"), "Test Provider");
+        recipientRegistry.approveRecipient(creditWallet,    keccak256("COMPUTE"), "CreditWallet");
 
         usdc.mint(borrower, 10_000e6);
         vm.prank(borrower);
@@ -91,8 +113,9 @@ contract CollateralVaultTest is Test {
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: keccak256("COMPUTE"), cap: principal});
 
-        address[] memory recipients = new address[](1);
+        address[] memory recipients = new address[](2);
         recipients[0] = address(0xD00D);
+        recipients[1] = creditWallet;
 
         uint256[] memory milestoneAmounts = new uint256[](1);
         milestoneAmounts[0] = principal;
@@ -100,19 +123,20 @@ contract CollateralVaultTest is Test {
         milestoneDescs[0] = "Full release";
 
         return ILoanRegistry.LoanProposal({
-            creditWallet: creditWallet,
-            principal: principal,
-            repaymentRateBps: 1500,
-            totalRepaymentDue: 1_150e6,
-            duration: 30 days,
-            purpose: "Test collateralized loan",
-            budget: budget,
-            permittedRecipients: recipients,
-            milestoneAmounts: milestoneAmounts,
+            agentId:               agentId,
+            creditWallet:          creditWallet,
+            principal:             principal,
+            repaymentRateBps:      1500,
+            totalRepaymentDue:     1_150e6,
+            duration:              30 days,
+            purpose:               "Test collateralized loan",
+            budget:                budget,
+            permittedRecipients:   recipients,
+            milestoneAmounts:      milestoneAmounts,
             milestoneDescriptions: milestoneDescs,
-            collateralAmount: collateralAmount,
-            underwriter: address(0),
-            underwriterAmount: 0
+            collateralAmount:      collateralAmount,
+            underwriter:           address(0),
+            underwriterAmount:     0
         });
     }
 
@@ -132,7 +156,8 @@ contract CollateralVaultTest is Test {
     }
 
     function test_CollateralBackedLoanBypassesCreditLimit() public {
-        assertEq(creditRegistry.getLimit(borrower), 5e6);
+        // agentId has no credit history: getLimit(agentId) = initialLimit = 5e6
+        assertEq(creditRegistry.getLimit(agentId), 5e6);
 
         uint256 requiredCollateral = vault.requiredCollateral(principal);
         vm.prank(borrower);
@@ -196,7 +221,9 @@ contract CollateralVaultTest is Test {
         uint256 lenderBalanceAfter = usdc.balanceOf(lender);
 
         assertEq(lenderBalanceAfter - lenderBalanceBefore, requiredCollateral);
-        assertEq(creditRegistry.getLimit(borrower), 1e6);
+        // recordDefault(agentId, false) for collateral default: penalty on initialLimit.
+        // initialLimit=5e6, exists=false → oldLimit=5e6, penalty=5e6*2000/10000=1e6
+        assertEq(creditRegistry.getLimit(agentId), 1e6);
     }
 
     function test_RevertsOnDoubleReservation() public {

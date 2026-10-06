@@ -10,6 +10,7 @@ import {CollateralVault} from "../src/CollateralVault.sol";
 import {RevenueRouter} from "../src/RevenueRouter.sol";
 import {ILoanRegistry} from "../src/interfaces/ILoanRegistry.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 // ── Minimal mock token ────────────────────────────────────────────────────────
@@ -48,8 +49,8 @@ contract StubRouter {
         credit = CreditRegistry(_credit);
     }
 
-    function repay(uint256 loanId, address borrower, uint256 principal) external {
-        credit.recordRepayment(borrower, principal, false);
+    function repay(uint256 loanId, uint256 agentId_, uint256 principal) external {
+        credit.recordRepayment(agentId_, principal, false);
         reg.markRepaid(loanId);
     }
 
@@ -67,6 +68,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
     uint256 constant GRACE           = 3  days;
     uint256 constant COLLATERAL_APPROVAL_THRESH = 50_000e6;
 
+    AgentRegistry   agentReg;
     MockUSDC        usdc;
     LoanRegistry    registry;
     CreditRegistry  creditReg;
@@ -79,17 +81,30 @@ contract Risk08_ConcurrentCreditLimit is Test {
     address borrower = address(0xB0B0);
     address lender   = address(0xBEEF);
     address recipient;
+    uint256 agentId;
 
     // ── setup ─────────────────────────────────────────────────────────────────
 
     function setUp() public {
         usdc = new MockUSDC();
 
+        // AgentRegistry
+        agentReg = AgentRegistry(address(new ERC1967Proxy(
+            address(new AgentRegistry()),
+            abi.encodeCall(AgentRegistry.initialize, (owner))
+        )));
+        vm.prank(borrower);
+        agentId = agentReg.registerAgent(0);
+        // recipient doubles as creditWallet in _proposal; register it as a borrower wallet too
+        recipient = address(0xCAFE);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, recipient);
+
         // CreditRegistry
         CreditRegistry creditImpl = new CreditRegistry();
         bytes memory creditInit = abi.encodeCall(
             CreditRegistry.initialize,
-            (owner, INITIAL_LIMIT, 1000, 500, 50_000e6, 2000, APPROVAL_THRESH)
+            (owner, INITIAL_LIMIT, 1000, 500, 50_000e6, 2000, APPROVAL_THRESH, 500, 50e6, 50_000e6)
         );
         creditReg = CreditRegistry(address(new ERC1967Proxy(address(creditImpl), creditInit)));
 
@@ -97,7 +112,6 @@ contract Risk08_ConcurrentCreditLimit is Test {
         RecipientRegistry recipientImpl = new RecipientRegistry();
         bytes memory recipientInit = abi.encodeCall(RecipientRegistry.initialize, (owner));
         recipientReg = RecipientRegistry(address(new ERC1967Proxy(address(recipientImpl), recipientInit)));
-        recipient = address(0xCAFE);
         recipientReg.approveRecipient(recipient, bytes32("dev"), "test");
 
         // LoanRegistry
@@ -108,6 +122,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
         );
         registry = LoanRegistry(address(new ERC1967Proxy(address(regImpl), regInit)));
         registry.setRecipientRegistry(address(recipientReg));
+        registry.setAgentRegistry(address(agentReg));
 
         // StubVault + StubRouter
         vault  = new StubVault(address(registry), address(usdc));
@@ -148,7 +163,8 @@ contract Risk08_ConcurrentCreditLimit is Test {
         ILoanRegistry.BudgetCategory[] memory budget = new ILoanRegistry.BudgetCategory[](1);
         budget[0] = ILoanRegistry.BudgetCategory({categoryId: bytes32("dev"), cap: principal});
         return ILoanRegistry.LoanProposal({
-            creditWallet:       address(0xDEAD),
+            agentId:            agentId,
+            creditWallet:       recipient, // RISK-15: must be approved and in permittedRecipients
             principal:          principal,
             totalRepaymentDue:  principal * 115 / 100,
             repaymentRateBps:   1000,
@@ -209,7 +225,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
         vm.prank(borrower);
         uint256 id2 = registry.requestLoan(_proposal(each));
 
-        assertEq(registry.outstandingPrincipal(borrower), each * 3);
+        assertEq(registry.outstandingPrincipal(agentId), each * 3);
         assertEq(uint8(registry.getLoan(id0).status), uint8(ILoanRegistry.LoanStatus.Requested));
         assertEq(uint8(registry.getLoan(id1).status), uint8(ILoanRegistry.LoanStatus.Requested));
         assertEq(uint8(registry.getLoan(id2).status), uint8(ILoanRegistry.LoanStatus.Requested));
@@ -222,7 +238,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_proposal(p));
-        assertEq(registry.outstandingPrincipal(borrower), p);
+        assertEq(registry.outstandingPrincipal(agentId), p);
 
         // fund → active
         _fund(loanId);
@@ -233,8 +249,8 @@ contract Risk08_ConcurrentCreditLimit is Test {
         registry.requestLoan(_proposal(1e6));
 
         // repay
-        router.repay(loanId, borrower, p);
-        assertEq(registry.outstandingPrincipal(borrower), 0);
+        router.repay(loanId, agentId, p);
+        assertEq(registry.outstandingPrincipal(agentId), 0);
 
         // now a new loan is possible (limit also grew via recordRepayment)
         vm.prank(borrower);
@@ -251,14 +267,14 @@ contract Risk08_ConcurrentCreditLimit is Test {
         uint256 loanId = registry.requestLoan(_proposal(p));
         _fund(loanId);
 
-        assertEq(registry.outstandingPrincipal(borrower), p);
+        assertEq(registry.outstandingPrincipal(agentId), p);
 
         // warp past expiry + grace
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
         vm.warp(loan.expiresAt + GRACE + 1);
 
         registry.markDefault(loanId); // owner call (no keeper set)
-        assertEq(registry.outstandingPrincipal(borrower), 0);
+        assertEq(registry.outstandingPrincipal(agentId), 0);
     }
 
     // ── Test 05: collateral-backed loan increments outstandingPrincipal ────────
@@ -274,7 +290,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
         registry.requestLoan(_collateralProposal(principal, collateral));
 
         // outstandingPrincipal recorded even though credit-limit check was skipped
-        assertEq(registry.outstandingPrincipal(borrower), principal);
+        assertEq(registry.outstandingPrincipal(agentId), principal);
     }
 
     // ── Test 06: collateral-backed loan NOT blocked by exhausted credit limit ──
@@ -284,7 +300,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
         uint256 p = INITIAL_LIMIT;
         vm.prank(borrower);
         registry.requestLoan(_proposal(p));
-        assertEq(registry.outstandingPrincipal(borrower), p);
+        assertEq(registry.outstandingPrincipal(agentId), p);
 
         // Collateral-backed loan should still succeed despite exhausted limit
         uint256 bigPrincipal  = 20_000e6;
@@ -298,7 +314,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
         // so it lands as Requested, not PendingApproval
         assertEq(uint8(registry.getLoan(cvId).status), uint8(ILoanRegistry.LoanStatus.Requested));
         // outstandingPrincipal includes both
-        assertEq(registry.outstandingPrincipal(borrower), p + bigPrincipal);
+        assertEq(registry.outstandingPrincipal(agentId), p + bigPrincipal);
     }
 
     // ── Test 07: collateral default decrements outstandingPrincipal ───────────
@@ -314,13 +330,13 @@ contract Risk08_ConcurrentCreditLimit is Test {
         // no approval needed since principal < collateralApprovalThreshold
         _fund(loanId);
 
-        assertEq(registry.outstandingPrincipal(borrower), principal);
+        assertEq(registry.outstandingPrincipal(agentId), principal);
 
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
         vm.warp(loan.expiresAt + GRACE + 1);
         registry.markDefault(loanId);
 
-        assertEq(registry.outstandingPrincipal(borrower), 0);
+        assertEq(registry.outstandingPrincipal(agentId), 0);
     }
 
     // ── Test 08: double-termination cannot decrement twice ────────────────────
@@ -333,15 +349,15 @@ contract Risk08_ConcurrentCreditLimit is Test {
         _fund(loanId);
 
         // repay via router
-        router.repay(loanId, borrower, p);
-        assertEq(registry.outstandingPrincipal(borrower), 0);
+        router.repay(loanId, agentId, p);
+        assertEq(registry.outstandingPrincipal(agentId), 0);
 
         // attempt to mark repaid again → should revert (status already Repaid)
         vm.expectRevert(LoanRegistry.LoanNotActive.selector);
-        router.repay(loanId, borrower, p);
+        router.repay(loanId, agentId, p);
 
         // outstanding remains 0 — no double-decrement
-        assertEq(registry.outstandingPrincipal(borrower), 0);
+        assertEq(registry.outstandingPrincipal(agentId), 0);
     }
 
     // ── Test 09: outstanding set correctly on 3 sequential requests ───────────
@@ -351,15 +367,15 @@ contract Risk08_ConcurrentCreditLimit is Test {
 
         vm.prank(borrower);
         registry.requestLoan(_proposal(each));
-        assertEq(registry.outstandingPrincipal(borrower), 1_000e6);
+        assertEq(registry.outstandingPrincipal(agentId), 1_000e6);
 
         vm.prank(borrower);
         registry.requestLoan(_proposal(each));
-        assertEq(registry.outstandingPrincipal(borrower), 2_000e6);
+        assertEq(registry.outstandingPrincipal(agentId), 2_000e6);
 
         vm.prank(borrower);
         registry.requestLoan(_proposal(each));
-        assertEq(registry.outstandingPrincipal(borrower), 3_000e6);
+        assertEq(registry.outstandingPrincipal(agentId), 3_000e6);
     }
 
     // ── Test 10: exact-limit request succeeds, one-over reverts ──────────────
@@ -367,7 +383,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
     function test_10_ExactLimitSucceeds_OnceOverReverts() public {
         vm.prank(borrower);
         registry.requestLoan(_proposal(INITIAL_LIMIT)); // exactly at limit — should pass
-        assertEq(registry.outstandingPrincipal(borrower), INITIAL_LIMIT);
+        assertEq(registry.outstandingPrincipal(agentId), INITIAL_LIMIT);
 
         vm.expectRevert(LoanRegistry.ExceedsCreditLimit.selector);
         vm.prank(borrower);
