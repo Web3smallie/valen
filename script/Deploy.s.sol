@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script, console} from "forge-std/Script.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {Options} from "openzeppelin-foundry-upgrades/Options.sol";
 import {AgentRegistry}     from "../src/AgentRegistry.sol";
 import {CreditRegistry}    from "../src/CreditRegistry.sol";
 import {LoanRegistry}      from "../src/LoanRegistry.sol";
@@ -18,17 +19,17 @@ import {ActivityAttester}  from "../src/ActivityAttester.sol";
 /// @notice Deploys and wires all eleven Valen V1 contracts to Arc testnet.
 ///
 ///         Deployment order respects constructor/initializer dependencies:
-///           1.  AgentRegistry      — no deps
-///           2.  CreditRegistry     — no deps
-///           3.  LoanRegistry       — CreditRegistry
-///           4.  RevenueRouter      — LoanRegistry, CreditRegistry
-///           5.  LoanVault          — LoanRegistry
-///           6.  CollateralVault    — LoanRegistry
-///           7.  UnderwriterPool    — LoanRegistry
-///           8.  RecipientRegistry  — no deps
-///           9.  ReservePool        — LoanRegistry
-///          10.  LiquidityPool      — all of the above
-///          11.  ActivityAttester   — AgentRegistry, CreditRegistry
+///           1.  AgentRegistry      -- no deps
+///           2.  CreditRegistry     -- no deps
+///           3.  LoanRegistry       -- CreditRegistry
+///           4.  RevenueRouter      -- LoanRegistry, CreditRegistry
+///           5.  LoanVault          -- LoanRegistry
+///           6.  CollateralVault    -- LoanRegistry
+///           7.  UnderwriterPool    -- LoanRegistry
+///           8.  RecipientRegistry  -- no deps
+///           9.  ReservePool        -- LoanRegistry
+///          10.  LiquidityPool      -- all of the above
+///          11.  ActivityAttester   -- AgentRegistry, CreditRegistry
 ///
 ///         Run with:
 ///           forge script script/Deploy.s.sol \
@@ -36,10 +37,10 @@ import {ActivityAttester}  from "../src/ActivityAttester.sol";
 contract DeployScript is Script {
     address constant DEPLOYER = 0xB0E8Ba6aFe21371AD4001e611224FC200FD10144;
 
-    // Arc Testnet USDC — 6-decimal ERC-20 precompile.
+    // Arc Testnet USDC -- 6-decimal ERC-20 precompile.
     address constant USDC = 0x3600000000000000000000000000000000000000;
 
-    // ── CreditRegistry parameters ────────────────────────────────────────────
+    // CreditRegistry parameters
     uint256 constant INITIAL_LIMIT                 = 5e6;
     uint16  constant GROWTH_BPS                    = 2500;
     uint16  constant EARLY_BONUS_BPS               = 1000;
@@ -50,17 +51,27 @@ contract DeployScript is Script {
     uint256 constant MAX_ACTIVITY_INCREASE_PER_EVT = 50e6;
     uint256 constant MAX_ACTIVITY_LIMIT            = 50_000e6;
 
-    // ── LoanRegistry parameters ──────────────────────────────────────────────
+    // LoanRegistry parameters
     uint256 constant MIN_DURATION                  = 1 days;
     uint256 constant MAX_DURATION                  = 365 days;
     uint256 constant DEFAULT_GRACE_PERIOD          = 3 days;
     uint256 constant COLLATERAL_APPROVAL_THRESHOLD = 10_000e6;
 
-    // ── CollateralVault / RevenueRouter parameters ───────────────────────────
+    // CollateralVault / RevenueRouter parameters
     uint16  constant MAX_LTV_BPS                   = 6600;
     uint16  constant RESERVE_BPS                   = 200;
 
-    // ── Deployment addresses (set across internal deploy functions) ───────────
+    // Deploy options: unsafeSkipAllChecks bypasses the OZ upgrade-safety
+    // validator's vm.readFile calls, which would otherwise accumulate enough
+    // EVM memory across 11 contract deployments to trigger MemoryOOG in the
+    // local Forge execution context.  Safe for a fresh initial deployment
+    // because there is no prior storage layout to compare against -- upgrade-
+    // safety checks only guard against regressions on existing proxies.
+    function _opts() private pure returns (Options memory opts) {
+        opts.unsafeSkipAllChecks = true;
+    }
+
+    // Deployment addresses (set across internal deploy functions)
     address internal _agentRegistry;
     address internal _creditRegistry;
     address internal _loanRegistry;
@@ -73,7 +84,7 @@ contract DeployScript is Script {
     address internal _liquidityPool;
     address internal _activityAttester;
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     function run() external {
         vm.startBroadcast();
         _deployInfra();
@@ -85,11 +96,12 @@ contract DeployScript is Script {
         _logAddresses();
     }
 
-    // ── Phase 1: Independent contracts ───────────────────────────────────────
+    // Phase 1: Independent contracts
     function _deployInfra() internal {
         _agentRegistry = Upgrades.deployUUPSProxy(
             "AgentRegistry.sol",
-            abi.encodeCall(AgentRegistry.initialize, (DEPLOYER))
+            abi.encodeCall(AgentRegistry.initialize, (DEPLOYER)),
+            _opts()
         );
         _creditRegistry = Upgrades.deployUUPSProxy(
             "CreditRegistry.sol",
@@ -98,71 +110,81 @@ contract DeployScript is Script {
                 INITIAL_LIMIT, GROWTH_BPS, EARLY_BONUS_BPS,
                 MAX_STEP_INCREASE, DEFAULT_PENALTY_BPS, APPROVAL_THRESHOLD,
                 ACTIVITY_GROWTH_BPS, MAX_ACTIVITY_INCREASE_PER_EVT, MAX_ACTIVITY_LIMIT
-            ))
+            )),
+            _opts()
         );
     }
 
-    // ── Phase 2: Loan layer (depends on CreditRegistry) ──────────────────────
+    // Phase 2: Loan layer (depends on CreditRegistry)
     function _deployLoanLayer() internal {
         _loanRegistry = Upgrades.deployUUPSProxy(
             "LoanRegistry.sol",
             abi.encodeCall(LoanRegistry.initialize, (
                 DEPLOYER, _creditRegistry,
                 MIN_DURATION, MAX_DURATION, DEFAULT_GRACE_PERIOD, COLLATERAL_APPROVAL_THRESHOLD
-            ))
+            )),
+            _opts()
         );
         _router = Upgrades.deployUUPSProxy(
             "RevenueRouter.sol",
             abi.encodeCall(RevenueRouter.initialize, (
                 DEPLOYER, _loanRegistry, _creditRegistry, USDC
-            ))
+            )),
+            _opts()
         );
         _loanVault = Upgrades.deployUUPSProxy(
             "LoanVault.sol",
-            abi.encodeCall(LoanVault.initialize, (DEPLOYER, _loanRegistry, USDC))
+            abi.encodeCall(LoanVault.initialize, (DEPLOYER, _loanRegistry, USDC)),
+            _opts()
         );
         _collateralVault = Upgrades.deployUUPSProxy(
             "CollateralVault.sol",
-            abi.encodeCall(CollateralVault.initialize, (DEPLOYER, USDC, _loanRegistry, MAX_LTV_BPS))
+            abi.encodeCall(CollateralVault.initialize, (DEPLOYER, USDC, _loanRegistry, MAX_LTV_BPS)),
+            _opts()
         );
         _underwriterPool = Upgrades.deployUUPSProxy(
             "UnderwriterPool.sol",
-            abi.encodeCall(UnderwriterPool.initialize, (DEPLOYER, USDC, _loanRegistry))
+            abi.encodeCall(UnderwriterPool.initialize, (DEPLOYER, USDC, _loanRegistry)),
+            _opts()
         );
     }
 
-    // ── Phase 3: Support contracts (independent or depend on loanRegistry) ───
+    // Phase 3: Support contracts (independent or depend on loanRegistry)
     function _deploySupport() internal {
         _recipientRegistry = Upgrades.deployUUPSProxy(
             "RecipientRegistry.sol",
-            abi.encodeCall(RecipientRegistry.initialize, (DEPLOYER))
+            abi.encodeCall(RecipientRegistry.initialize, (DEPLOYER)),
+            _opts()
         );
         _reservePool = Upgrades.deployUUPSProxy(
             "ReservePool.sol",
-            abi.encodeCall(ReservePool.initialize, (DEPLOYER, USDC, _loanRegistry))
+            abi.encodeCall(ReservePool.initialize, (DEPLOYER, USDC, _loanRegistry)),
+            _opts()
         );
     }
 
-    // ── Phase 4: LiquidityPool + ActivityAttester (depend on everything) ─────
+    // Phase 4: LiquidityPool + ActivityAttester (depend on everything)
     function _deployLiquidityAndAttester() internal {
         _liquidityPool = Upgrades.deployUUPSProxy(
-            "LiquidityPool.sol",
+            "LiquidityPool.sol:LiquidityPool",
             abi.encodeCall(LiquidityPool.initialize, (
                 DEPLOYER, USDC,
                 _loanRegistry, _router,
                 _collateralVault, _underwriterPool,
                 _reservePool, _loanVault
-            ))
+            )),
+            _opts()
         );
         _activityAttester = Upgrades.deployUUPSProxy(
-            "ActivityAttester.sol",
+            "ActivityAttester.sol:ActivityAttester",
             abi.encodeCall(ActivityAttester.initialize, (
                 DEPLOYER, _agentRegistry, _creditRegistry
-            ))
+            )),
+            _opts()
         );
     }
 
-    // ── Wiring ────────────────────────────────────────────────────────────────
+    // Wiring
     function _wire() internal {
         // LoanRegistry: wire all one-time dependencies
         LoanRegistry reg = LoanRegistry(_loanRegistry);
@@ -192,7 +214,7 @@ contract DeployScript is Script {
         ReservePool(_reservePool).setAuthorizedContributor(_router, true);
     }
 
-    // ── Console log ──────────────────────────────────────────────────────────
+    // Console log
     function _logAddresses() internal view {
         console.log("AgentRegistry:     ", _agentRegistry);
         console.log("CreditRegistry:    ", _creditRegistry);
