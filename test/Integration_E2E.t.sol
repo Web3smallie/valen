@@ -415,6 +415,7 @@ contract IntegrationE2ETest is Test {
             milestoneAmounts:      milestoneAmounts,
             milestoneDescriptions: milestoneDescs,
             collateralAmount:      0,
+            collateralAsset:       address(0),
             underwriter:           address(0),
             underwriterAmount:     0
         });

@@ -174,6 +174,7 @@ contract LiquidityPoolTest is Test {
             milestoneAmounts: ms,
             milestoneDescriptions: desc,
             collateralAmount: collateralAmount,
+            collateralAsset:       address(0),
             underwriter: underwriter,
             underwriterAmount: underwriterAmount
         });
@@ -564,5 +565,79 @@ contract LiquidityPoolTest is Test {
 
     function _fundReservePoolDirectly(uint256 amount) internal {
         usdc.mint(address(reservePool), amount);
+    }
+
+    // -------------------------------------------------------------------------
+    // Finding 1 — sweepToken
+    // -------------------------------------------------------------------------
+
+    function test_SweepToken_ZeroTokenReverts() public {
+        vm.prank(owner);
+        vm.expectRevert(LiquidityPool.ZeroToken.selector);
+        pool.sweepToken(address(0), owner);
+    }
+
+    function test_SweepToken_ZeroRecipientReverts() public {
+        vm.prank(owner);
+        vm.expectRevert(LiquidityPool.ZeroRecipient.selector);
+        pool.sweepToken(address(usdc), address(0));
+    }
+
+    function test_SweepToken_NonOwnerReverts() public {
+        address stranger = address(0x1234);
+        vm.prank(stranger);
+        vm.expectRevert();  // OwnableUnauthorizedAccount
+        pool.sweepToken(address(usdc), owner);
+    }
+
+    function test_SweepToken_TransfersForeignTokenToRecipient() public {
+        // Simulate EURC arriving in the pool after a collateral seizure
+        MockUSDC5 eurc = new MockUSDC5();
+        eurc.mint(address(pool), 500e6);
+
+        address recipient = address(0xBEEF);
+        assertEq(eurc.balanceOf(address(pool)), 500e6);
+        assertEq(eurc.balanceOf(recipient), 0);
+
+        vm.prank(owner);
+        pool.sweepToken(address(eurc), recipient);
+
+        assertEq(eurc.balanceOf(address(pool)), 0);
+        assertEq(eurc.balanceOf(recipient), 500e6);
+    }
+
+    function test_SweepToken_EmitsEvent() public {
+        MockUSDC5 eurc = new MockUSDC5();
+        eurc.mint(address(pool), 200e6);
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, true);
+        emit LiquidityPool.TokenSwept(address(eurc), owner, 200e6);
+        pool.sweepToken(address(eurc), owner);
+    }
+
+    function test_SweepToken_ZeroBalanceEmitsEventWithZero() public {
+        MockUSDC5 eurc = new MockUSDC5();
+        // No balance — sweep should still succeed (no transfer) and emit amount=0
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, true);
+        emit LiquidityPool.TokenSwept(address(eurc), owner, 0);
+        pool.sweepToken(address(eurc), owner);
+    }
+
+    function test_SweepToken_DoesNotAffectUsdcAccounting() public {
+        _seedPool(20_000e6);
+        uint256 idleBefore  = pool.idleLedger();
+        uint256 sharesBefore = pool.totalShares();
+
+        // Sweep a completely unrelated token — USDC accounting must not change
+        MockUSDC5 eurc = new MockUSDC5();
+        eurc.mint(address(pool), 1_000e6);
+        vm.prank(owner);
+        pool.sweepToken(address(eurc), owner);
+
+        assertEq(pool.idleLedger(), idleBefore,   "idleLedger unchanged");
+        assertEq(pool.totalShares(), sharesBefore, "totalShares unchanged");
+        assertEq(pool.totalAssets(), idleBefore,   "totalAssets unchanged");
     }
 }

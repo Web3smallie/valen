@@ -197,6 +197,7 @@ contract Risk05_FundFromPoolAuthTest is Test {
             milestoneAmounts: ms,
             milestoneDescriptions: desc,
             collateralAmount: 0,
+            collateralAsset:       address(0),
             underwriter: address(0),
             underwriterAmount: 0
         }));
@@ -241,6 +242,7 @@ contract Risk05_FundFromPoolAuthTest is Test {
             milestoneAmounts: ms,
             milestoneDescriptions: desc,
             collateralAmount: required,
+            collateralAsset:       address(0),
             underwriter: address(0),
             underwriterAmount: 0
         }));

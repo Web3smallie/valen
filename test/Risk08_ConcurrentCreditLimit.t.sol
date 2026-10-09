@@ -175,6 +175,7 @@ contract Risk08_ConcurrentCreditLimit is Test {
             milestoneAmounts:   amounts,
             milestoneDescriptions: descs,
             collateralAmount:   0,
+            collateralAsset:       address(0),
             underwriter:        address(0),
             underwriterAmount:  0
         });

@@ -198,7 +198,7 @@ contract Risk01_DefaultVaultRecoveryTest is Test {
             duration: 30 days, purpose: "RISK-01 test",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, underwriter: address(0), underwriterAmount: 0
+            collateralAmount: 0, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
         });
     }
 
@@ -321,7 +321,7 @@ contract Risk01_DefaultVaultRecoveryTest is Test {
             totalRepaymentDue: 57.5e6, duration: 30 days, purpose: "zero-test",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, underwriter: address(0), underwriterAmount: 0
+            collateralAmount: 0, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
         });
 
         vm.prank(borrower);
@@ -386,7 +386,7 @@ contract Risk01_DefaultVaultRecoveryTest is Test {
             purpose: "collateral test",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: required, underwriter: address(0), underwriterAmount: 0
+            collateralAmount: required, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
         });
 
         vm.prank(borrower);
@@ -438,7 +438,7 @@ contract Risk01_DefaultVaultRecoveryTest is Test {
             purpose: "underwriter test",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, underwriter: underwriter, underwriterAmount: stake
+            collateralAmount: 0, collateralAsset: address(0), underwriter: underwriter, underwriterAmount: stake
         });
 
         vm.prank(borrower);

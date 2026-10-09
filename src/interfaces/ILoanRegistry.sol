@@ -64,7 +64,8 @@ interface ILoanRegistry {
         address[] permittedRecipients;
         uint256[] milestoneAmounts;
         string[]  milestoneDescriptions;
-        uint256 collateralAmount;  // Path A: >0 = collateral-backed
+        uint256 collateralAmount;  // Path A: >0 = collateral-backed (raw token units)
+        address collateralAsset;   // Path A: ERC-20 token used as collateral (address(0) = USDC default)
         address underwriter;       // Path B: address(0) = no underwriter
         uint256 underwriterAmount; // Path B: >0 = underwriter-backed amount
     }
@@ -74,6 +75,7 @@ interface ILoanRegistry {
     // -------------------------------------------------------------------------
 
     function getCollateralAmount(uint256 loanId) external view returns (uint256);
+    function getCollateralAsset(uint256 loanId) external view returns (address);
     function getUnderwriterAmount(uint256 loanId) external view returns (uint256);
     function getLoan(uint256 loanId) external view returns (LoanView memory);
     function getMilestones(uint256 loanId) external view returns (Milestone[] memory);

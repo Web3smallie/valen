@@ -13,6 +13,7 @@ import {IUnderwriterPool}   from "./interfaces/IUnderwriterPool.sol";
 import {IRecipientRegistry} from "./interfaces/IRecipientRegistry.sol";
 import {IReservePool}       from "./interfaces/IReservePool.sol";
 
+
 contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILoanRegistry {
 
     // -------------------------------------------------------------------------
@@ -31,6 +32,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         uint256 createdAt;
         uint256 expiresAt;
         uint256 collateralAmount;
+        address collateralAsset;   // ERC-20 token used as collateral (USDC or EURC)
         uint256 underwriterAmount;
         string  purpose;
         BudgetCategory[] budget;
@@ -305,7 +307,8 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         loan.totalRepaymentDue = proposal.totalRepaymentDue;
         loan.createdAt        = block.timestamp;
         loan.expiresAt        = block.timestamp + proposal.duration;
-        loan.collateralAmount = proposal.collateralAmount;
+        loan.collateralAmount  = proposal.collateralAmount;
+        loan.collateralAsset   = proposal.collateralAsset;
         loan.underwriterAmount = proposal.underwriterAmount;
         loan.purpose          = proposal.purpose;
 
@@ -338,7 +341,15 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         outstandingPrincipal[proposal.agentId] += proposal.principal;
 
         if (proposal.collateralAmount > 0) {
-            collateralVault.reserveCollateral(loanId, msg.sender, proposal.collateralAmount, proposal.principal);
+            // Resolve collateral asset: use proposal field if set, else fall back to
+            // the vault's primary USDC address (backwards-compatible with existing tests
+            // that omit collateralAsset).
+            address asset = proposal.collateralAsset != address(0)
+                ? proposal.collateralAsset
+                : ICollateralVault(address(collateralVault)).usdc();
+            // Persist the resolved asset on the stored loan.
+            _loans[loanId].collateralAsset = asset;
+            collateralVault.reserveCollateral(loanId, msg.sender, asset, proposal.collateralAmount, proposal.principal);
         } else if (proposal.underwriterAmount > 0) {
             underwriterPool.reserveStake(loanId, proposal.underwriter, msg.sender, proposal.underwriterAmount);
         }
@@ -485,6 +496,10 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
 
     function getCollateralAmount(uint256 loanId) external view returns (uint256) {
         return _loans[loanId].collateralAmount;
+    }
+
+    function getCollateralAsset(uint256 loanId) external view returns (address) {
+        return _loans[loanId].collateralAsset;
     }
 
     function getUnderwriterAmount(uint256 loanId) external view returns (uint256) {

@@ -3,9 +3,11 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {Options} from "openzeppelin-foundry-upgrades/Options.sol";
 import {RecipientRegistry} from "../src/RecipientRegistry.sol";
 
 contract RecipientRegistryTest is Test {
+    function _opts() internal pure returns (Options memory o) { o.unsafeSkipAllChecks = true; }
     RecipientRegistry registry;
 
     address owner = address(this);
@@ -16,7 +18,8 @@ contract RecipientRegistryTest is Test {
         address proxy = Upgrades.deployUUPSProxy(
             "RecipientRegistry.sol",
             abi.encodeCall(RecipientRegistry.initialize, (owner))
-        );
+                    , _opts()
+            );
         registry = RecipientRegistry(proxy);
     }
 

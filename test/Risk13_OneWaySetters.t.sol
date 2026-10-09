@@ -216,6 +216,7 @@ contract Risk13_OneWaySettersTest is Test {
             repaymentRateBps:      RATE_BPS,
             duration:              30 days,
             collateralAmount:      0,
+            collateralAsset:       address(0),
             underwriterAmount:     0,
             underwriter:           address(0),
             purpose:               "test",

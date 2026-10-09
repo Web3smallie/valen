@@ -7,6 +7,6 @@ ffi = true
 build_info = true
 extra_output = ["storageLayout"]
 [rpc_endpoints]
-arc_testnet = "https://rpc.testnet.arc.network"
+arc_testnet = "https://rpc.testnet.arc.io"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

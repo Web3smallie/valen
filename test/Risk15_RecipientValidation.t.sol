@@ -182,6 +182,7 @@ contract Risk15_RecipientValidation is Test {
             duration:              DURATION,
             purpose:               "RISK-15 test loan",
             collateralAmount:      0,
+            collateralAsset:       address(0),
             underwriterAmount:     0,
             underwriter:           address(0),
             budget:                budget,

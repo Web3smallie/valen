@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {Options} from "openzeppelin-foundry-upgrades/Options.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {LoanRegistry} from "../src/LoanRegistry.sol";
@@ -19,6 +20,7 @@ contract MockUSDC2 is ERC20 {
 }
 
 contract CollateralVaultTest is Test {
+    function _opts() internal pure returns (Options memory o) { o.unsafeSkipAllChecks = true; }
     AgentRegistry     agentReg;
     LoanRegistry      registry;
     CreditRegistry    creditRegistry;
@@ -57,7 +59,8 @@ contract CollateralVaultTest is Test {
             "CreditRegistry.sol",
             abi.encodeCall(CreditRegistry.initialize,
                 (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
-        );
+                    , _opts()
+            );
         creditRegistry = CreditRegistry(creditRegistryProxy);
 
         // ── LoanRegistry ───────────────────────────────────────────────────────
@@ -66,7 +69,8 @@ contract CollateralVaultTest is Test {
             abi.encodeCall(LoanRegistry.initialize,
                 (owner, address(creditRegistry), 1 days, 365 days,
                  DEFAULT_GRACE_PERIOD, COLLATERAL_APPROVAL_THRESHOLD))
-        );
+                    , _opts()
+            );
         registry = LoanRegistry(registryProxy);
 
         // ── RevenueRouter ──────────────────────────────────────────────────────
@@ -74,7 +78,8 @@ contract CollateralVaultTest is Test {
             "RevenueRouter.sol",
             abi.encodeCall(RevenueRouter.initialize,
                 (owner, address(registry), address(creditRegistry), address(usdc)))
-        );
+                    , _opts()
+            );
         router = RevenueRouter(routerProxy);
 
         // ── CollateralVault ────────────────────────────────────────────────────
@@ -82,14 +87,16 @@ contract CollateralVaultTest is Test {
             "CollateralVault.sol",
             abi.encodeCall(CollateralVault.initialize,
                 (owner, address(usdc), address(registry), MAX_LTV_BPS))
-        );
+                    , _opts()
+            );
         vault = CollateralVault(vaultProxy);
 
         // ── RecipientRegistry ──────────────────────────────────────────────────
         address recipientRegistryProxy = Upgrades.deployUUPSProxy(
             "RecipientRegistry.sol",
             abi.encodeCall(RecipientRegistry.initialize, (owner))
-        );
+                    , _opts()
+            );
         recipientRegistry = RecipientRegistry(recipientRegistryProxy);
 
         // ── Wire ───────────────────────────────────────────────────────────────
@@ -135,6 +142,7 @@ contract CollateralVaultTest is Test {
             milestoneAmounts:      milestoneAmounts,
             milestoneDescriptions: milestoneDescs,
             collateralAmount:      collateralAmount,
+            collateralAsset:    address(0),
             underwriter:           address(0),
             underwriterAmount:     0
         });
@@ -142,39 +150,39 @@ contract CollateralVaultTest is Test {
 
     function test_RequiredCollateralMath() public view {
         uint256 expected = (principal * 10000) / MAX_LTV_BPS;
-        assertEq(vault.requiredCollateral(principal), expected);
+        assertEq(vault.requiredCollateral(principal, address(usdc)), expected);
     }
 
     function test_DepositAndWithdraw() public {
         vm.prank(borrower);
-        vault.depositCollateral(500e6);
-        assertEq(vault.availableBalance(borrower), 500e6);
+        vault.depositCollateral(address(usdc), 500e6);
+        assertEq(vault.availableBalance(borrower, address(usdc)), 500e6);
 
         vm.prank(borrower);
-        vault.withdrawCollateral(200e6);
-        assertEq(vault.availableBalance(borrower), 300e6);
+        vault.withdrawCollateral(address(usdc), 200e6);
+        assertEq(vault.availableBalance(borrower, address(usdc)), 300e6);
     }
 
     function test_CollateralBackedLoanBypassesCreditLimit() public {
         // agentId has no credit history: getLimit(agentId) = initialLimit = 5e6
         assertEq(creditRegistry.getLimit(agentId), 5e6);
 
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral);
+        vault.depositCollateral(address(usdc), requiredCollateral);
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_buildProposal(requiredCollateral));
 
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
         assertEq(uint8(loan.status), uint8(ILoanRegistry.LoanStatus.Requested));
-        assertEq(vault.availableBalance(borrower), 0);
+        assertEq(vault.availableBalance(borrower, address(usdc)), 0);
     }
 
     function test_RevertsOnInsufficientCollateralForLTV() public {
-        uint256 tooLittle = vault.requiredCollateral(principal) - 1;
+        uint256 tooLittle = vault.requiredCollateral(principal, address(usdc)) - 1;
         vm.prank(borrower);
-        vault.depositCollateral(tooLittle);
+        vault.depositCollateral(address(usdc), tooLittle);
 
         vm.prank(borrower);
         vm.expectRevert(CollateralVault.InsufficientCollateralForLTV.selector);
@@ -182,9 +190,9 @@ contract CollateralVaultTest is Test {
     }
 
     function test_RepaymentReleasesCollateral() public {
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral);
+        vault.depositCollateral(address(usdc), requiredCollateral);
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_buildProposal(requiredCollateral));
@@ -203,9 +211,9 @@ contract CollateralVaultTest is Test {
     }
 
     function test_DefaultSeizesCollateralToLender() public {
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral);
+        vault.depositCollateral(address(usdc), requiredCollateral);
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_buildProposal(requiredCollateral));
@@ -227,27 +235,27 @@ contract CollateralVaultTest is Test {
     }
 
     function test_RevertsOnDoubleReservation() public {
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral * 2);
+        vault.depositCollateral(address(usdc), requiredCollateral * 2);
 
         vm.prank(borrower);
         registry.requestLoan(_buildProposal(requiredCollateral));
 
         vm.prank(address(registry));
         vm.expectRevert(CollateralVault.AlreadyReserved.selector);
-        vault.reserveCollateral(0, borrower, requiredCollateral, principal);
+        vault.reserveCollateral(0, borrower, address(usdc), requiredCollateral, principal);
     }
 
     function test_OnlyRegistryCanReserve() public {
         vm.expectRevert(CollateralVault.NotRegistry.selector);
-        vault.reserveCollateral(999, borrower, 100e6, 100e6);
+        vault.reserveCollateral(999, borrower, address(usdc), 100e6, 100e6);
     }
 
     function test_ProposalWithApprovedRecipientSucceeds() public {
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral);
+        vault.depositCollateral(address(usdc), requiredCollateral);
 
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_buildProposal(requiredCollateral));
@@ -257,9 +265,9 @@ contract CollateralVaultTest is Test {
     }
 
     function test_ProposalWithUnapprovedRecipientReverts() public {
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral);
+        vault.depositCollateral(address(usdc), requiredCollateral);
 
         address[] memory badRecipients = new address[](1);
         badRecipients[0] = address(0xBADBAD);
@@ -273,9 +281,9 @@ contract CollateralVaultTest is Test {
     }
 
     function test_MixedApprovedAndUnapprovedRecipientsRevertsEntirely() public {
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral);
+        vault.depositCollateral(address(usdc), requiredCollateral);
 
         address[] memory mixedRecipients = new address[](2);
         mixedRecipients[0] = address(0xD00D);
@@ -292,9 +300,9 @@ contract CollateralVaultTest is Test {
     function test_RevokedRecipientCausesNewProposalToRevert() public {
         recipientRegistry.revokeRecipient(address(0xD00D));
 
-        uint256 requiredCollateral = vault.requiredCollateral(principal);
+        uint256 requiredCollateral = vault.requiredCollateral(principal, address(usdc));
         vm.prank(borrower);
-        vault.depositCollateral(requiredCollateral);
+        vault.depositCollateral(address(usdc), requiredCollateral);
 
         vm.prank(borrower);
         vm.expectRevert(LoanRegistry.UnapprovedRecipient.selector);

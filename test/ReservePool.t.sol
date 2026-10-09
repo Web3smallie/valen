@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {Options} from "openzeppelin-foundry-upgrades/Options.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {LoanRegistry} from "../src/LoanRegistry.sol";
@@ -22,6 +23,7 @@ contract MockUSDC4 is ERC20 {
 }
 
 contract ReservePoolTest is Test {
+    function _opts() internal pure returns (Options memory o) { o.unsafeSkipAllChecks = true; }
     AgentRegistry agentReg;
     uint256 agentId;
     LoanRegistry registry;
@@ -61,7 +63,8 @@ contract ReservePoolTest is Test {
         address creditRegistryProxy = Upgrades.deployUUPSProxy(
             "CreditRegistry.sol",
             abi.encodeCall(CreditRegistry.initialize, (owner, 5e6, 2500, 1000, 2000e6, 2000, 25_000e6, 500, 50e6, 50_000e6))
-        );
+                    , _opts()
+            );
         creditRegistry = CreditRegistry(creditRegistryProxy);
 
         address registryProxy = Upgrades.deployUUPSProxy(
@@ -70,25 +73,29 @@ contract ReservePoolTest is Test {
                 LoanRegistry.initialize,
                 (owner, address(creditRegistry), 1 days, 365 days, DEFAULT_GRACE_PERIOD, COLLATERAL_APPROVAL_THRESHOLD)
             )
-        );
+                    , _opts()
+            );
         registry = LoanRegistry(registryProxy);
 
         address routerProxy = Upgrades.deployUUPSProxy(
             "RevenueRouter.sol",
             abi.encodeCall(RevenueRouter.initialize, (owner, address(registry), address(creditRegistry), address(usdc)))
-        );
+                    , _opts()
+            );
         router = RevenueRouter(routerProxy);
 
         address recipientRegistryProxy = Upgrades.deployUUPSProxy(
             "RecipientRegistry.sol",
             abi.encodeCall(RecipientRegistry.initialize, (owner))
-        );
+                    , _opts()
+            );
         recipientRegistry = RecipientRegistry(recipientRegistryProxy);
 
         address reserveProxy = Upgrades.deployUUPSProxy(
             "ReservePool.sol",
             abi.encodeCall(ReservePool.initialize, (owner, address(usdc), address(registry)))
-        );
+                    , _opts()
+            );
         reserve = ReservePool(reserveProxy);
 
         registry.setContracts(vault, address(router));
@@ -132,6 +139,7 @@ contract ReservePoolTest is Test {
             milestoneAmounts: milestoneAmounts,
             milestoneDescriptions: milestoneDescs,
             collateralAmount: 0,
+            collateralAsset: address(0),
             underwriter: address(0),
             underwriterAmount: 0
         });

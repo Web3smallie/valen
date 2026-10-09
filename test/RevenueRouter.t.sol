@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {Options} from "openzeppelin-foundry-upgrades/Options.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {LoanRegistry} from "../src/LoanRegistry.sol";
@@ -18,6 +19,7 @@ contract MockUSDC is ERC20 {
 }
 
 contract RevenueRouterTest is Test {
+    function _opts() internal pure returns (Options memory o) { o.unsafeSkipAllChecks = true; }
     AgentRegistry  agentReg;
     LoanRegistry   registry;
     CreditRegistry creditRegistry;
@@ -68,7 +70,8 @@ contract RevenueRouterTest is Test {
             abi.encodeCall(CreditRegistry.initialize,
                 (owner, INITIAL_LIMIT, GROWTH_BPS, EARLY_BONUS_BPS, MAX_STEP_INCREASE,
                  DEFAULT_PENALTY_BPS, APPROVAL_THRESHOLD, 500, 50e6, 50_000e6))
-        );
+                    , _opts()
+            );
         creditRegistry = CreditRegistry(creditRegistryProxy);
 
         // ── LoanRegistry ───────────────────────────────────────────────────────
@@ -77,7 +80,8 @@ contract RevenueRouterTest is Test {
             abi.encodeCall(LoanRegistry.initialize,
                 (owner, address(creditRegistry), 1 days, 365 days,
                  DEFAULT_GRACE_PERIOD, COLLATERAL_APPROVAL_THRESHOLD))
-        );
+                    , _opts()
+            );
         registry = LoanRegistry(registryProxy);
 
         // ── RevenueRouter ──────────────────────────────────────────────────────
@@ -85,14 +89,16 @@ contract RevenueRouterTest is Test {
             "RevenueRouter.sol",
             abi.encodeCall(RevenueRouter.initialize,
                 (owner, address(registry), address(creditRegistry), address(usdc)))
-        );
+                    , _opts()
+            );
         router = RevenueRouter(routerProxy);
 
         // ── RecipientRegistry ──────────────────────────────────────────────────
         address recipientRegistryProxy = Upgrades.deployUUPSProxy(
             "RecipientRegistry.sol",
             abi.encodeCall(RecipientRegistry.initialize, (owner))
-        );
+                    , _opts()
+            );
         recipientRegistry = RecipientRegistry(recipientRegistryProxy);
 
         // ── Wire ───────────────────────────────────────────────────────────────
@@ -137,6 +143,7 @@ contract RevenueRouterTest is Test {
             milestoneAmounts:      milestoneAmounts,
             milestoneDescriptions: milestoneDescs,
             collateralAmount:      0,
+            collateralAsset: address(0),
             underwriter:           address(0),
             underwriterAmount:     0
         });

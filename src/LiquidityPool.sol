@@ -10,7 +10,14 @@ import {ILoanRegistry} from "./interfaces/ILoanRegistry.sol";
 import {IRevenueRouter} from "./interfaces/IRevenueRouter.sol";
 
 interface ICollateralVaultView {
-    function reservations(uint256 loanId) external view returns (address borrower, uint256 amount, bool resolved);
+    /// @notice Returns the reservation fields for a given loan.
+    /// @dev    `asset` is the collateral token address (USDC or EURC in V1).
+    function reservations(uint256 loanId)
+        external
+        view
+        returns (address borrower, address asset, uint256 amount, bool resolved);
+    /// @notice Primary USDC address registered in the vault.
+    function usdc() external view returns (address);
 }
 
 interface IUnderwriterPoolView {
@@ -99,6 +106,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error NoSharesOutstanding();
     error TooManyActiveLoans();
     error InvalidMaxActiveLoans();
+    error ZeroToken();
+    error ZeroRecipient();
 
     modifier onlyLoanVault() {
         if (msg.sender != loanVault) revert NotLoanVault();
@@ -232,8 +241,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (loan.status == ILoanRegistry.LoanStatus.Defaulted && !defaultRecoveryCounted[loanId]) {
             defaultRecoveryCounted[loanId] = true;
             if (loanRegistry.getCollateralAmount(loanId) > 0) {
-                (, uint256 amt, bool resolved) = collateralVault.reservations(loanId);
-                if (resolved) delta += amt;
+                (, address collAsset, uint256 amt, bool resolved) = collateralVault.reservations(loanId);
+                // Only credit USDC-denominated collateral into the USDC idleLedger.
+                // Non-USDC collateral (e.g. EURC) is seized to the lender in its
+                // original token; the pool does not credit it as USDC recovery —
+                // the loss is written off and the lender holds the EURC directly.
+                if (resolved && collAsset == collateralVault.usdc()) delta += amt;
             } else if (loanRegistry.getUnderwriterAmount(loanId) > 0) {
                 (, uint256 amt, bool resolved) = underwriterPool.reservations(loanId);
                 if (resolved) delta += amt;
@@ -340,6 +353,23 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (newMax == 0) revert InvalidMaxActiveLoans();
         emit MaxActiveLoansChanged(maxActiveLoans, newMax);
         maxActiveLoans = newMax;
+    }
+
+    /// @notice Recover a non-USDC ERC-20 token held by the pool.
+    ///         Intended for seized non-USDC collateral (e.g. EURC) that
+    ///         accumulates here after a default. Does NOT touch idleLedger,
+    ///         totalDeployed, or any share accounting — the loss was already
+    ///         written off by reconcileLoan().
+    /// @param token  ERC-20 token to sweep (must not be zero).
+    /// @param to     Recipient address (must not be zero).
+    event TokenSwept(address indexed token, address indexed to, uint256 amount);
+
+    function sweepToken(address token, address to) external onlyOwner {
+        if (token == address(0)) revert ZeroToken();
+        if (to == address(0)) revert ZeroRecipient();
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        if (bal > 0) IERC20(token).safeTransfer(to, bal);
+        emit TokenSwept(token, to, bal);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

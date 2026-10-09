@@ -194,7 +194,7 @@ contract Risk03_VaultSettlementOrderingTest is Test {
             duration: 30 days, purpose: "RISK-03 test",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, underwriter: address(0), underwriterAmount: 0
+            collateralAmount: 0, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
         }));
 
         vault.fundFromPool(loanId);
@@ -344,7 +344,7 @@ contract Risk03_VaultSettlementOrderingTest is Test {
             duration: 30 days, purpose: "collateral+vault",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: required, underwriter: address(0), underwriterAmount: 0
+            collateralAmount: required, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
         }));
 
         vault.fundFromPool(loanId);
@@ -403,7 +403,7 @@ contract Risk03_VaultSettlementOrderingTest is Test {
             duration: 30 days, purpose: "underwriter+vault",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, underwriter: underwriter, underwriterAmount: stake
+            collateralAmount: 0, collateralAsset: address(0), underwriter: underwriter, underwriterAmount: stake
         }));
 
         registry.approveLoan(loanId);
@@ -484,7 +484,7 @@ contract Risk03_VaultSettlementOrderingTest is Test {
             duration: 30 days, purpose: "zero-vault",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, underwriter: address(0), underwriterAmount: 0
+            collateralAmount: 0, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
         }));
 
         vault.fundFromPool(loanId);
@@ -529,7 +529,7 @@ contract Risk03_VaultSettlementOrderingTest is Test {
             duration: 30 days, purpose: "direct lender",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, underwriter: address(0), underwriterAmount: 0
+            collateralAmount: 0, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
         }));
 
         vm.prank(directLender);
