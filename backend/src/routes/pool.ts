@@ -1,10 +1,14 @@
 /**
- * GET /pool — LiquidityPool state: idle liquidity, deployed capital,
- *             total assets, share price, lender share for a wallet.
+ * GET /pool — LiquidityPool state.
+ *
+ * Response shape matches frontend PoolResponse:
+ *   idleLedger, idleLedgerFormatted, totalDeployed, totalDeployedFormatted,
+ *   activeLoanCount, reserveBalance, reserveBalanceFormatted
  */
 import type { FastifyInstance } from "fastify";
 import { contracts }             from "../config/contracts.js";
 import { LiquidityPoolAbi }      from "../abis/LiquidityPool.js";
+import { ReservePoolAbi }        from "../abis/ReservePool.js";
 import { readContract }          from "../lib/rpc.js";
 import { formatUnits6 }          from "../lib/format.js";
 
@@ -31,15 +35,31 @@ export async function poolRoutes(app: FastifyInstance) {
       readContract({ address: contracts.liquidityPool, abi: LiquidityPoolAbi, functionName: "initializedLiquidity" }) as Promise<boolean>,
     ]);
 
+    // Attempt reserve balance read; fall back to "0" if ReservePool not configured.
+    let reserveBalance = 0n;
+    try {
+      reserveBalance = await readContract({
+        address: contracts.reservePool,
+        abi: ReservePoolAbi,
+        functionName: "totalContributed",
+      }) as bigint;
+    } catch { /* not critical */ }
+
     return {
-      idleLedger:   { raw: idleLedger.toString(),   formatted: formatUnits6(idleLedger)   },
-      totalDeployed:{ raw: totalDeployed.toString(), formatted: formatUnits6(totalDeployed)},
-      totalAssets:  { raw: totalAssets.toString(),   formatted: formatUnits6(totalAssets)  },
-      // sharePrice is a fixed-point ratio scaled by 1e6; display as raw
-      sharePrice:   sharePrice.toString(),
-      totalShares:  totalShares.toString(),
-      activeLoanCount:    activeLoanCount.toString(),
-      maxActiveLoans:     maxActiveLoans.toString(),
+      // Flat fields expected by frontend PoolResponse
+      idleLedger:              idleLedger.toString(),
+      idleLedgerFormatted:     formatUnits6(idleLedger),
+      totalDeployed:           totalDeployed.toString(),
+      totalDeployedFormatted:  formatUnits6(totalDeployed),
+      activeLoanCount:         activeLoanCount.toString(),
+      reserveBalance:          reserveBalance.toString(),
+      reserveBalanceFormatted: formatUnits6(reserveBalance),
+      // Extended fields for informational use
+      totalAssets:             totalAssets.toString(),
+      totalAssetsFormatted:    formatUnits6(totalAssets),
+      sharePrice:              sharePrice.toString(),
+      totalShares:             totalShares.toString(),
+      maxActiveLoans:          maxActiveLoans.toString(),
       initializedLiquidity,
       address: contracts.liquidityPool,
     };

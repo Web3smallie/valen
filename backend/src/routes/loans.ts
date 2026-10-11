@@ -1,8 +1,10 @@
 /**
- * GET /loans                      — all loans (paginated, via events)
+ * GET /loans                      — all loans (paginated via events)
  * GET /loans/:loanId              — full loan detail
  * GET /loans/:loanId/repayment    — repayment state
  * GET /loans/:loanId/collateral   — collateral reservation
+ *
+ * All response shapes match frontend types in api.ts.
  */
 import type { FastifyInstance } from "fastify";
 import { contracts }             from "../config/contracts.js";
@@ -16,9 +18,10 @@ import { validateUint, loanStatusName, formatUnits6 } from "../lib/format.js";
 export async function loanRoutes(app: FastifyInstance) {
 
   // ── GET /loans ────────────────────────────────────────────────────────────
+  // Returns LoanSummary[] — fetches events then getLoan for each item on the page.
   app.get<{ Querystring: { page?: string; pageSize?: string } }>("/loans", async (req) => {
     const page     = Math.max(1, parseInt(req.query.page ?? "1", 10));
-    const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize ?? "50", 10)));
+    const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize ?? "20", 10)));
 
     const logs = await getLogs({
       address: contracts.loanRegistry,
@@ -36,28 +39,40 @@ export async function loanRoutes(app: FastifyInstance) {
     });
 
     type LoanReqLog = { args?: { loanId?: bigint; agentId?: bigint; borrower?: string } };
-    const all   = logs.map((l) => {
-      const args = (l as unknown as LoanReqLog).args ?? {};
-      return {
-        loanId:   args.loanId?.toString()  ?? "?",
-        agentId:  args.agentId?.toString() ?? "?",
-        borrower: args.borrower ?? "?",
-      };
-    });
-    const total = all.length;
-    const start = (page - 1) * pageSize;
-    const items = all.slice(start, start + pageSize);
+    const allIds = logs.map((l) => (l as unknown as LoanReqLog).args?.loanId ?? 0n);
+    const total  = allIds.length;
+    const start  = (page - 1) * pageSize;
+    const slice  = allIds.slice(start, start + pageSize);
 
-    return {
-      total,
-      page,
-      pageSize,
-      items,
-      note: "Sourced from LoanRequested events. Use GET /loans/:loanId for full detail.",
-    };
+    const summaries = await Promise.all(
+      slice.map(async (loanId) => {
+        const loan = await readContract({
+          address: contracts.loanRegistry,
+          abi:     LoanRegistryAbi,
+          functionName: "getLoan",
+          args: [loanId],
+        }) as {
+          agentId: bigint; borrower: string; principal: bigint;
+          status: number;
+        };
+
+        return {
+          loanId:             loanId.toString(),
+          borrower:           loan.borrower,
+          agentId:            loan.agentId.toString(),
+          status:             loan.status,
+          statusName:         loanStatusName(loan.status),
+          principal:          loan.principal.toString(),
+          principalFormatted: formatUnits6(loan.principal),
+        };
+      })
+    );
+
+    return summaries;
   });
 
   // ── GET /loans/:loanId ────────────────────────────────────────────────────
+  // Returns LoanDetail — flat shape matching frontend type.
   app.get<{ Params: { loanId: string } }>("/loans/:loanId", async (req, reply) => {
     const loanId = validateUint(req.params.loanId, "loanId");
 
@@ -72,9 +87,9 @@ export async function loanRoutes(app: FastifyInstance) {
     }
 
     const [loan, milestones, budget, collateralAmount, collateralAsset] = await Promise.all([
-      readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getLoan",           args: [loanId] }),
-      readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getMilestones",     args: [loanId] }),
-      readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getBudget",         args: [loanId] }),
+      readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getLoan",             args: [loanId] }),
+      readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getMilestones",       args: [loanId] }),
+      readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getBudget",           args: [loanId] }),
       readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getCollateralAmount", args: [loanId] }) as Promise<bigint>,
       readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getCollateralAsset",  args: [loanId] }) as Promise<string>,
     ]);
@@ -85,41 +100,47 @@ export async function loanRoutes(app: FastifyInstance) {
       status: number; createdAt: bigint; expiresAt: bigint;
     };
 
+    const duration = l.expiresAt > 0n && l.createdAt > 0n
+      ? (l.expiresAt - l.createdAt).toString()
+      : "0";
+
     return {
-      loanId: loanId.toString(),
-      agentId: l.agentId.toString(),
-      borrower:    l.borrower,
-      lender:      l.lender,
-      creditWallet:l.creditWallet,
-      status: {
-        code: l.status,
-        name: loanStatusName(l.status),
-      },
-      principal: {
-        raw:       l.principal.toString(),
-        formatted: formatUnits6(l.principal),
-      },
-      totalRepaymentDue: {
-        raw:       l.totalRepaymentDue.toString(),
-        formatted: formatUnits6(l.totalRepaymentDue),
-      },
-      repaymentRateBps: l.repaymentRateBps,
-      createdAt:  Number(l.createdAt),
-      expiresAt:  Number(l.expiresAt),
-      collateral: {
-        asset:  collateralAsset,
-        amount: { raw: collateralAmount.toString(), formatted: formatUnits6(collateralAmount) },
-      },
+      // Flat fields matching frontend LoanDetail
+      loanId:                      loanId.toString(),
+      agentId:                     l.agentId.toString(),
+      borrower:                    l.borrower,
+      lender:                      l.lender,
+      creditWallet:                l.creditWallet,
+      principal:                   l.principal.toString(),
+      principalFormatted:          formatUnits6(l.principal),
+      totalRepaymentDue:           l.totalRepaymentDue.toString(),
+      totalRepaymentDueFormatted:  formatUnits6(l.totalRepaymentDue),
+      repaymentRateBps:            l.repaymentRateBps.toString(),
+      status:                      l.status,
+      statusName:                  loanStatusName(l.status),
+      duration,
+      startTimestamp:              l.createdAt.toString(),
+      collateralAmount:            collateralAmount.toString(),
+      collateralAmountFormatted:   formatUnits6(collateralAmount),
+      collateralAsset,
+      // Nested extended data
       milestones: (milestones as Array<{ amount: bigint; released: boolean; description: string }>).map(
-        (m, i) => ({ index: i, amount: { raw: m.amount.toString(), formatted: formatUnits6(m.amount) }, released: m.released, description: m.description })
+        (m, i) => ({
+          index:       i,
+          amount:      m.amount.toString(),
+          amountFormatted: formatUnits6(m.amount),
+          released:    m.released,
+          description: m.description,
+        })
       ),
       budget: (budget as Array<{ categoryId: string; cap: bigint }>).map(
-        (b) => ({ categoryId: b.categoryId, cap: { raw: b.cap.toString(), formatted: formatUnits6(b.cap) } })
+        (b) => ({ categoryId: b.categoryId, cap: b.cap.toString(), capFormatted: formatUnits6(b.cap) })
       ),
     };
   });
 
   // ── GET /loans/:loanId/repayment ──────────────────────────────────────────
+  // Returns RepaymentResponse — flat, matches frontend type.
   app.get<{ Params: { loanId: string } }>("/loans/:loanId/repayment", async (req, reply) => {
     const loanId = validateUint(req.params.loanId, "loanId");
 
@@ -133,21 +154,31 @@ export async function loanRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: `Loan ${loanId} does not exist` });
     }
 
-    const [recovered, isFullyRepaid, lockedAmount] = await Promise.all([
+    const [recovered, isFullyRepaid, loanRaw] = await Promise.all([
       readContract({ address: contracts.revenueRouter, abi: RevenueRouterAbi, functionName: "totalRecovered", args: [loanId] }) as Promise<bigint>,
       readContract({ address: contracts.revenueRouter, abi: RevenueRouterAbi, functionName: "isFullyRepaid",  args: [loanId] }) as Promise<boolean>,
-      readContract({ address: contracts.loanVault,     abi: LoanVaultAbi,     functionName: "lockedAmount",   args: [loanId] }) as Promise<bigint>,
+      readContract({ address: contracts.loanRegistry,  abi: LoanRegistryAbi,  functionName: "getLoan",        args: [loanId] }),
     ]);
 
+    const l = loanRaw as { totalRepaymentDue: bigint };
+    const outstanding = l.totalRepaymentDue > recovered
+      ? l.totalRepaymentDue - recovered
+      : 0n;
+
     return {
-      loanId: loanId.toString(),
-      totalRecovered: { raw: recovered.toString(), formatted: formatUnits6(recovered) },
+      loanId:                      loanId.toString(),
+      totalRecovered:              recovered.toString(),
+      totalRecoveredFormatted:     formatUnits6(recovered),
       isFullyRepaid,
-      vaultLockedAmount: { raw: lockedAmount.toString(), formatted: formatUnits6(lockedAmount) },
+      totalRepaymentDue:           l.totalRepaymentDue.toString(),
+      totalRepaymentDueFormatted:  formatUnits6(l.totalRepaymentDue),
+      outstanding:                 outstanding.toString(),
+      outstandingFormatted:        formatUnits6(outstanding),
     };
   });
 
   // ── GET /loans/:loanId/collateral ─────────────────────────────────────────
+  // Returns CollateralResponse — flat, matches frontend type.
   app.get<{ Params: { loanId: string } }>("/loans/:loanId/collateral", async (req, reply) => {
     const loanId = validateUint(req.params.loanId, "loanId");
 
@@ -171,10 +202,11 @@ export async function loanRoutes(app: FastifyInstance) {
     const [borrower, asset, amount, resolved] = reservation;
 
     return {
-      loanId:   loanId.toString(),
+      loanId:          loanId.toString(),
       borrower,
       asset,
-      amount: { raw: amount.toString(), formatted: formatUnits6(amount) },
+      amount:          amount.toString(),
+      amountFormatted: formatUnits6(amount),
       resolved,
     };
   });

@@ -37,6 +37,11 @@ vi.stubEnv("ARC_TESTNET_RPC_URL",       "https://rpc.testnet.arc.io");
 import Fastify from "fastify";
 import * as rpc from "../lib/rpc.js";
 
+beforeEach(() => {
+  vi.mocked(rpc.readContract).mockReset();
+  vi.mocked(rpc.getLogs).mockReset();
+});
+
 // ── Build a minimal test app (no event listeners) ─────────────────────────────
 async function buildApp() {
   const app = Fastify({ logger: false });
@@ -168,13 +173,17 @@ describe("GET /pool", () => {
       .mockResolvedValueOnce(20_000_000n)  // totalShares
       .mockResolvedValueOnce(0n)           // activeLoanCount
       .mockResolvedValueOnce(10n)          // maxActiveLoans
-      .mockResolvedValueOnce(true);        // initializedLiquidity
+      .mockResolvedValueOnce(true)         // initializedLiquidity
+      .mockResolvedValueOnce(0n);          // totalContributed (reservePool)
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/pool" });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.idleLedger.raw).toBe("20000000");
-    expect(body.idleLedger.formatted).toBe("20.000000");
+    // New flat shape: idleLedger is a string, not { raw, formatted }
+    expect(body.idleLedger).toBe("20000000");
+    expect(body.idleLedgerFormatted).toBe("20.000000");
+    expect(body.totalDeployed).toBe("0");
+    expect(body.activeLoanCount).toBe("0");
     expect(body.initializedLiquidity).toBe(true);
   });
 });
