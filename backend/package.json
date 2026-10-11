@@ -1,23 +1,25 @@
 {
-  "name": "backend",
+  "name": "valen-backend",
   "version": "1.0.0",
-  "main": "index.js",
-   "type": "module",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start":    "node --experimental-vm-modules dist/index.js",
+    "dev":      "tsx watch src/index.ts",
+    "build":    "tsc --project tsconfig.json",
+    "typecheck":"tsc --noEmit",
+    "test":     "vitest run",
+    "test:watch":"vitest"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "dotenv": "^17.4.2",
+    "dotenv":  "^17.4.2",
     "fastify": "^5.12.3",
-    "viem": "^2.56.3"
+    "viem":    "^2.56.3"
   },
   "devDependencies": {
-    "@types/node": "^22.20.2",
-    "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "@types/node":        "^22.20.2",
+    "@vitest/coverage-v8":"^3.2.4",
+    "tsx":                "^4.23.13",
+    "typescript":         "^7.0.2",
+    "vitest":             "^3.2.4"
   }
 }

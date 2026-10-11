@@ -1,0 +1,7 @@
+# Never commit secrets or build artifacts
+.env
+.env.local
+.env.*.local
+node_modules/
+dist/
+*.js.map

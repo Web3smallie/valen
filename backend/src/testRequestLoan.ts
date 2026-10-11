@@ -7,6 +7,7 @@ import { keccak256, toBytes } from "viem";
 
 async function main() {
   const proposal = {
+    agentId: 0n, // replace with registered agentId before sending
     creditWallet: deployerAccount.address,
     principal: 5_000_000n, // 5 USDC at 6 decimals
     repaymentRateBps: 1500,
@@ -18,8 +19,10 @@ async function main() {
     milestoneAmounts: [5_000_000n],
     milestoneDescriptions: ["Full release"],
     collateralAmount: 0n,
+    collateralAsset: "0x0000000000000000000000000000000000000000" as const, // set to EURC/USDC address when using collateral
     underwriter: "0x0000000000000000000000000000000000000000" as const,
     underwriterAmount: 0n,
+    directDisbursement: false, // set true for collateral-backed loans to skip milestone release
   };
 
   console.log("Submitting requestLoan()...");

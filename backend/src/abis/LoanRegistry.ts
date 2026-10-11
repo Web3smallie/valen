@@ -19,6 +19,19 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "agentRegistry",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IAgentRegistry"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "approveLoan",
     "inputs": [
       {
@@ -134,6 +147,44 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "getCollateralAsset",
+    "inputs": [
+      {
+        "name": "loanId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getDirectDisbursement",
+    "inputs": [
+      {
+        "name": "loanId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getLoan",
     "inputs": [
       {
@@ -148,6 +199,11 @@ export const LoanRegistryAbi = [
         "type": "tuple",
         "internalType": "struct ILoanRegistry.LoanView",
         "components": [
+          {
+            "name": "agentId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
           {
             "name": "borrower",
             "type": "address",
@@ -312,6 +368,25 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "keepers",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "markDefault",
     "inputs": [
       {
@@ -413,6 +488,25 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "outstandingPrincipal",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [
@@ -466,6 +560,11 @@ export const LoanRegistryAbi = [
         "type": "tuple",
         "internalType": "struct ILoanRegistry.LoanProposal",
         "components": [
+          {
+            "name": "agentId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
           {
             "name": "creditWallet",
             "type": "address",
@@ -534,6 +633,11 @@ export const LoanRegistryAbi = [
             "internalType": "uint256"
           },
           {
+            "name": "collateralAsset",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
             "name": "underwriter",
             "type": "address",
             "internalType": "address"
@@ -542,6 +646,11 @@ export const LoanRegistryAbi = [
             "name": "underwriterAmount",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "directDisbursement",
+            "type": "bool",
+            "internalType": "bool"
           }
         ]
       }
@@ -583,6 +692,19 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "setAgentRegistry",
+    "inputs": [
+      {
+        "name": "_agentRegistry",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setCollateralVault",
     "inputs": [
       {
@@ -607,6 +729,24 @@ export const LoanRegistryAbi = [
         "name": "_router",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setKeeper",
+    "inputs": [
+      {
+        "name": "keeper",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -710,6 +850,19 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "event",
+    "name": "AgentRegistrySet",
+    "inputs": [
+      {
+        "name": "agentRegistry",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "CollateralVaultSet",
     "inputs": [
       {
@@ -743,6 +896,25 @@ export const LoanRegistryAbi = [
         "type": "uint64",
         "indexed": false,
         "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KeeperSet",
+    "inputs": [
+      {
+        "name": "keeper",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -989,7 +1161,17 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "error",
+    "name": "AgentRegistryAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BudgetSumMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CallerNotAgentWallet",
     "inputs": []
   },
   {
@@ -1000,6 +1182,16 @@ export const LoanRegistryAbi = [
   {
     "type": "error",
     "name": "ContractsAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CreditWalletNotAgentWallet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CreditWalletNotInRecipients",
     "inputs": []
   },
   {
@@ -1070,6 +1262,11 @@ export const LoanRegistryAbi = [
   },
   {
     "type": "error",
+    "name": "LoansAlreadyExist",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "MilestoneAlreadyReleased",
     "inputs": []
   },
@@ -1086,6 +1283,11 @@ export const LoanRegistryAbi = [
   {
     "type": "error",
     "name": "NoPermittedRecipients",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotAuthorized",
     "inputs": []
   },
   {
