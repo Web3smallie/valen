@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Arc Dark tokens ── */
+:root {
+  --bg: #0c1626;
+  --bg-gradient: linear-gradient(180deg, #0c1626 0%, #0d1b2f 58%, #111f38 100%);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-strong: rgba(255, 255, 255, 0.10);
+  --surface-muted: #162032;
+  --ink: #f0f4fa;
+  --ink-2: #c8d8ef;
+  --muted: #8fa3be;
+  --subtle: #5c7492;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(180, 210, 255, 0.28);
+  --accent: #7c5cfc;
+  --accent-hover: #9474fd;
+  --accent-dim: rgba(124, 92, 252, 0.18);
+  --success: #4dd68c;
+  --danger: #f06b78;
+  --warning: #f5a623;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  background-image: var(--bg-gradient);
+  color: var(--ink);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.display { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.03em; }
+.mono { font-family: 'JetBrains Mono', Menlo, monospace; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
