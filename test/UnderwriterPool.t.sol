@@ -147,7 +147,8 @@ contract UnderwriterPoolTest is Test {
             collateralAmount:      0,
             collateralAsset: address(0),
             underwriter:           _underwriter,
-            underwriterAmount:     underwriterAmount
+            underwriterAmount:     underwriterAmount,
+            directDisbursement:    false
         });
     }
 

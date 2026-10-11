@@ -179,7 +179,8 @@ contract Risk04_KeeperAuthorizationTest is Test {
             duration: 30 days, purpose: "RISK-04 test",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: 0, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
+            collateralAmount: 0, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0,
+            directDisbursement:    false
         });
     }
 
@@ -383,7 +384,8 @@ contract Risk04_KeeperAuthorizationTest is Test {
             duration: 30 days, purpose: "collateral test",
             budget: budget, permittedRecipients: recipients,
             milestoneAmounts: ms, milestoneDescriptions: desc,
-            collateralAmount: required, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0
+            collateralAmount: required, collateralAsset: address(0), underwriter: address(0), underwriterAmount: 0,
+            directDisbursement:    false
         });
 
         vm.prank(borrower);

@@ -188,7 +188,8 @@ contract Risk15_RecipientValidation is Test {
             budget:                budget,
             permittedRecipients:   permitted,
             milestoneAmounts:      amounts,
-            milestoneDescriptions: descs
+            milestoneDescriptions: descs,
+            directDisbursement:    false
         });
     }
 

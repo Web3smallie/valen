@@ -64,10 +64,14 @@ interface ILoanRegistry {
         address[] permittedRecipients;
         uint256[] milestoneAmounts;
         string[]  milestoneDescriptions;
-        uint256 collateralAmount;  // Path A: >0 = collateral-backed (raw token units)
-        address collateralAsset;   // Path A: ERC-20 token used as collateral (address(0) = USDC default)
-        address underwriter;       // Path B: address(0) = no underwriter
-        uint256 underwriterAmount; // Path B: >0 = underwriter-backed amount
+        uint256 collateralAmount;      // Path A: >0 = collateral-backed (raw token units)
+        address collateralAsset;       // Path A: ERC-20 token used as collateral (address(0) = USDC default)
+        address underwriter;           // Path B: address(0) = no underwriter
+        uint256 underwriterAmount;     // Path B: >0 = underwriter-backed amount
+        bool    directDisbursement;    // When true: full principal is sent to creditWallet at funding time,
+                                       //            bypassing per-milestone release calls.
+                                       // When false (default): funds are released per milestone as before.
+                                       // Immutable after requestLoan; cannot be changed post-approval.
     }
 
     // -------------------------------------------------------------------------
@@ -77,6 +81,7 @@ interface ILoanRegistry {
     function getCollateralAmount(uint256 loanId) external view returns (uint256);
     function getCollateralAsset(uint256 loanId) external view returns (address);
     function getUnderwriterAmount(uint256 loanId) external view returns (uint256);
+    function getDirectDisbursement(uint256 loanId) external view returns (bool);
     function getLoan(uint256 loanId) external view returns (LoanView memory);
     function getMilestones(uint256 loanId) external view returns (Milestone[] memory);
     function getBudget(uint256 loanId) external view returns (BudgetCategory[] memory);

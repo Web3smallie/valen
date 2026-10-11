@@ -1,3 +1,5 @@
+// AUTO-GENERATED from out/LoanRegistry.sol/LoanRegistry.json
+// LoanRegistry V4 (post-directDisbursement upgrade) — 16-field LoanProposal
 export const LoanRegistryAbi = [
   {
     "type": "constructor",

@@ -223,7 +223,8 @@ contract Risk13_OneWaySettersTest is Test {
             budget:                budget,
             permittedRecipients:   recipients,
             milestoneAmounts:      amounts,
-            milestoneDescriptions: descs
+            milestoneDescriptions: descs,
+            directDisbursement:    false
         });
     }
 

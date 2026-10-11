@@ -200,7 +200,8 @@ contract Risk10_ActiveLoanCapTest is Test {
             collateralAmount:      0,
             collateralAsset:       address(0),
             underwriter:           address(0),
-            underwriterAmount:     0
+            underwriterAmount:     0,
+            directDisbursement:    false
         });
     }
 

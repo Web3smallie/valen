@@ -170,7 +170,8 @@ contract MultiAssetCollateralTest is Test {
             collateralAmount:      collateralAmount,
             collateralAsset:       collateralAsset,
             underwriter:           address(0),
-            underwriterAmount:     0
+            underwriterAmount:     0,
+            directDisbursement:    false
         });
     }
 

@@ -176,7 +176,8 @@ contract LiquidityPoolTest is Test {
             collateralAmount: collateralAmount,
             collateralAsset:       address(0),
             underwriter: underwriter,
-            underwriterAmount: underwriterAmount
+            underwriterAmount: underwriterAmount,
+            directDisbursement:    false
         });
     }
 

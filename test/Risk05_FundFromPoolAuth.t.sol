@@ -199,7 +199,8 @@ contract Risk05_FundFromPoolAuthTest is Test {
             collateralAmount: 0,
             collateralAsset:       address(0),
             underwriter: address(0),
-            underwriterAmount: 0
+            underwriterAmount: 0,
+            directDisbursement: false
         }));
         // Status should be Requested (within credit limit)
         assertEq(
@@ -244,7 +245,8 @@ contract Risk05_FundFromPoolAuthTest is Test {
             collateralAmount: required,
             collateralAsset:       address(0),
             underwriter: address(0),
-            underwriterAmount: 0
+            underwriterAmount: 0,
+            directDisbursement: false
         }));
         assertEq(
             uint8(registry.getLoan(loanId).status),

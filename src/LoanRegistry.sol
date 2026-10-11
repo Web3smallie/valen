@@ -32,12 +32,15 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         uint256 createdAt;
         uint256 expiresAt;
         uint256 collateralAmount;
-        address collateralAsset;   // ERC-20 token used as collateral (USDC or EURC)
+        address collateralAsset;      // ERC-20 token used as collateral (USDC or EURC)
         uint256 underwriterAmount;
         string  purpose;
         BudgetCategory[] budget;
         address[] permittedRecipients;
         Milestone[] milestones;
+        bool    directDisbursement;   // Immutable after requestLoan. When true, LoanVault
+                                      // transfers the full principal to creditWallet at
+                                      // funding time instead of holding it for milestone release.
     }
 
     // -------------------------------------------------------------------------
@@ -307,10 +310,11 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         loan.totalRepaymentDue = proposal.totalRepaymentDue;
         loan.createdAt        = block.timestamp;
         loan.expiresAt        = block.timestamp + proposal.duration;
-        loan.collateralAmount  = proposal.collateralAmount;
-        loan.collateralAsset   = proposal.collateralAsset;
-        loan.underwriterAmount = proposal.underwriterAmount;
-        loan.purpose          = proposal.purpose;
+        loan.collateralAmount    = proposal.collateralAmount;
+        loan.collateralAsset     = proposal.collateralAsset;
+        loan.underwriterAmount   = proposal.underwriterAmount;
+        loan.purpose             = proposal.purpose;
+        loan.directDisbursement  = proposal.directDisbursement;
 
         for (uint256 i = 0; i < proposal.budget.length; i++) {
             loan.budget.push(proposal.budget[i]);
@@ -504,6 +508,10 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
 
     function getUnderwriterAmount(uint256 loanId) external view returns (uint256) {
         return _loans[loanId].underwriterAmount;
+    }
+
+    function getDirectDisbursement(uint256 loanId) external view returns (bool) {
+        return _loans[loanId].directDisbursement;
     }
 
     // -------------------------------------------------------------------------
