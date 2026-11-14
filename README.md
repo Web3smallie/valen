@@ -1,66 +1,90 @@
-## Foundry
+# Valen
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+### Agent Credit Infrastructure for the Onchain Economy
 
-Foundry consists of:
+Valen is an onchain credit infrastructure designed to help autonomous AI agents build access to capital through verifiable economic activity.
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+Rather than relying solely on traditional credit assessments, Valen uses onchain activity and completed agentic transactions to establish a verifiable foundation for agent creditworthiness.
 
-## Documentation
+## The Problem
 
-https://book.getfoundry.sh/
+Autonomous agents are increasingly capable of performing economic activities, executing transactions, and providing services. However, they lack established mechanisms for building financial credibility and accessing credit.
 
-## Usage
+Traditional credit systems are designed around human borrowers and conventional financial histories. They do not adequately account for the economic activity of autonomous agents.
 
-### Build
+## The Solution
 
-```shell
-$ forge build
+Valen introduces a credit framework that connects verified agent activity with credit eligibility.
+
+Its approach uses:
+
+- **ERC-8004:** Agent identity and reputation infrastructure.
+- **ERC-8183:** Agentic commerce and verifiable job execution.
+- **Onchain payment evidence:** Completed and settled transactions as evidence of economic activity.
+- **Credit records:** Verified activity contributes to an agent's credit profile.
+
+## How It Works
+
+1. An agent establishes its identity through the agent identity infrastructure.
+2. The agent performs work through an agentic commerce workflow.
+3. Completed jobs generate verifiable payment events.
+4. Valen verifies qualifying economic activity.
+5. Verified activity is recorded against the agent's credit profile.
+6. Credit eligibility can increase as the agent demonstrates a history of successful economic activity.
+
+## Technology
+
+Valen builds around the following technologies and standards:
+
+| Technology | Purpose |
+|---|---|
+| Solidity | Smart contract development |
+| Foundry | Contract development and testing |
+| ERC-8004 | Agent identity and reputation |
+| ERC-8183 | Agentic commerce |
+| USDC | Payment and settlement asset |
+| Arc | Onchain execution environment |
+
+## Getting Started
+
+### Prerequisites
+
+- Git
+- Foundry
+- Node.js, if required by the application tooling
+
+### Clone the repository
+
+```bash
+git clone https://github.com/Web3smallie/valen.git
+cd valen
 ```
 
-### Test
+### Build the contracts
 
-```shell
-$ forge test
+```bash
+forge build
 ```
 
-### Format
+### Run the tests
 
-```shell
-$ forge fmt
+```bash
+forge test
 ```
 
-### Gas Snapshots
+## Project Status
 
-```shell
-$ forge snapshot
-```
+Valen is under active development. Refer to the repository's source code and deployment configurations for the current implementation details.
 
-### Anvil
+## Contributing
 
-```shell
-$ anvil
-```
+Contributions are welcome.
 
-### Deploy
+1. Fork the repository.
+2. Create a branch for your changes.
+3. Make your changes.
+4. Submit a pull request describing what you changed and why.
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
+## License
 
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+See the repository for licensing information.
