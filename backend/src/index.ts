@@ -17,11 +17,30 @@ import { activityRoutes }  from "./routes/activity.js";
 import { prepareRoutes }   from "./routes/prepare.js";
 import { ValidationError } from "./lib/format.js";
 import { RpcError }        from "./lib/rpc.js";
+import { manifest }        from "./config/contracts.js";
+import { publicClient }    from "./chain/publicClient.js";
+import { validateDeployment, type ValidationRpc } from "./config/validate.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" } });
+
+// ── Deployment validation (fail-closed) ───────────────────────────────────────
+// Proves the manifest describes the chain the RPC serves before accepting
+// traffic. Any mismatch or unreachable RPC exits before listening.
+try {
+  const report = await validateDeployment(
+    publicClient as unknown as ValidationRpc,
+    manifest
+  );
+  app.log.info(
+    `deployment "${report.deployment}" verified: ${report.checks} checks on chain ${report.chainId}`
+  );
+} catch (err: unknown) {
+  app.log.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.setErrorHandler((error: Error & { statusCode?: number }, _req, reply) => {

@@ -19,23 +19,14 @@ vi.mock("../lib/rpc.js", async (importOriginal) => {
     getLogs:      vi.fn(),
   };
 });
-// Stub env vars so contracts.ts doesn't throw on missing env
-vi.stubEnv("AGENT_REGISTRY_ADDRESS",    "0xeC74944752Fff0f53Af5b727F288f59435C0144e");
-vi.stubEnv("LOAN_REGISTRY_ADDRESS",     "0x253B68c7a2D646561387Dc0958A6C176a30a6f8d");
-vi.stubEnv("LOAN_VAULT_ADDRESS",        "0x6F77979c0e2f6f8073FD6555c9A9d5883786AE19");
-vi.stubEnv("CREDIT_REGISTRY_ADDRESS",   "0x258B0678b30E2d32034389cfeCa7f58fE1CeB897");
-vi.stubEnv("REVENUE_ROUTER_ADDRESS",    "0xE0B9b39E72f73f2d85D77a1e24a2f319246de822");
-vi.stubEnv("COLLATERAL_VAULT_ADDRESS",  "0xC49999B7d32F1B1Df28d53efAdee450A0Fd7dA2f");
-vi.stubEnv("LIQUIDITY_POOL_ADDRESS",    "0x04B22AD06256cFdD32546aCC6c40bFF9C3eFd061");
-vi.stubEnv("UNDERWRITER_POOL_ADDRESS",  "0x0000000000000000000000000000000000000001");
-vi.stubEnv("RECIPIENT_REGISTRY_ADDRESS","0xf8E069B659CEAf9c68318041D727b5c482Ac6374");
-vi.stubEnv("RESERVE_POOL_ADDRESS",      "0x0000000000000000000000000000000000000002");
-vi.stubEnv("ACTIVITY_ATTESTER_ADDRESS", "0x2660044E4A7316B65263ea1B23b80aAf09841196");
-vi.stubEnv("EURC_ADDRESS",              "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a");
-vi.stubEnv("ARC_TESTNET_RPC_URL",       "https://rpc.testnet.arc.io");
+// No env stubbing: contract addresses resolve from the real deployment
+// manifest (deployments/arc-testnet.json), so these tests fail if the
+// manifest rots. RPC itself stays mocked (see above).
 
 import Fastify from "fastify";
 import * as rpc from "../lib/rpc.js";
+import { decodeFunctionData, type Abi } from "viem";
+import { LoanRegistryAbi } from "../abis/LoanRegistry.js";
 
 beforeEach(() => {
   vi.mocked(rpc.readContract).mockReset();
@@ -43,7 +34,7 @@ beforeEach(() => {
 });
 
 // ── Build a minimal test app (no event listeners) ─────────────────────────────
-async function buildApp() {
+async function buildApp(opts?: { prepareAbiVersion?: "V3" | "V4" }) {
   const app = Fastify({ logger: false });
 
   app.setErrorHandler((error: Error & { statusCode?: number }, _req, reply) => {
@@ -69,7 +60,7 @@ async function buildApp() {
   await app.register(assetRoutes);
   await app.register(recipientRoutes);
   await app.register(activityRoutes);
-  await app.register(prepareRoutes);
+  await app.register(prepareRoutes, { abiVersion: opts?.prepareAbiVersion });
 
   return app;
 }
@@ -283,6 +274,381 @@ describe("POST /loans/prepare — security boundaries", () => {
     expect(bodyStr).not.toContain("privateKey");
     expect(bodyStr).not.toContain("signedTransaction");
     expect(bodyStr).not.toContain("rawTransaction");
+  });
+});
+
+describe("GET /agents/:agentId/identity", () => {
+  const OWNER = "0x786d491fb520f3d9d9c7e62156c879fe52d6921e";
+
+  it("returns 404 for a nonexistent agent", async () => {
+    vi.mocked(rpc.readContract).mockResolvedValueOnce(
+      "0x0000000000000000000000000000000000000000"
+    ); // agentOwner = zero address
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/agents/999/identity" });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns owner, wallet count, and ERC-8004 ref", async () => {
+    vi.mocked(rpc.readContract)
+      .mockResolvedValueOnce(OWNER) // agentOwner
+      .mockResolvedValueOnce(2n)    // walletCount
+      .mockResolvedValueOnce(0n);   // erc8004Ref
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/agents/1/identity" });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      agentId: "1",
+      owner: OWNER,
+      walletCount: "2",
+      erc8004TokenId: "0",
+    });
+  });
+});
+
+describe("GET /agents/:agentId/credit", () => {
+  const OWNER = "0x786d491fb520f3d9d9c7e62156c879fe52d6921e";
+
+  it("returns 404 for a nonexistent agent", async () => {
+    vi.mocked(rpc.readContract).mockResolvedValueOnce(
+      "0x0000000000000000000000000000000000000000"
+    ); // agentOwner = zero address
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/agents/999/credit" });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("keys CreditRegistry reads by agentId and derives totals from on-chain loans", async () => {
+    vi.mocked(rpc.readContract)
+      .mockResolvedValueOnce(OWNER)       // agentOwner
+      .mockResolvedValueOnce(50_000_000n) // getLimit
+      .mockResolvedValueOnce(              // credits: AgentCredit 6-tuple
+        [10_000_000n, 3n, 1n, true, 5_000_000n, 7_000_000n] as const
+      )
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 10_000_000n, status: 4 }) // getLoan(0)
+      .mockResolvedValueOnce({ agentId: 2n, borrower: OWNER, principal: 99_000_000n, status: 4 }) // getLoan(1) — other agent
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 5_000_000n, status: 5 })  // getLoan(2) — repaid
+      .mockResolvedValueOnce(4_000_000n)  // totalRecovered(0)
+      .mockResolvedValueOnce(5_500_000n); // totalRecovered(2)
+    vi.mocked(rpc.getLogs).mockResolvedValueOnce([
+      { args: { loanId: 0n, borrower: OWNER } },
+      { args: { loanId: 1n, borrower: OWNER } },
+      { args: { loanId: 2n, borrower: OWNER } },
+    ] as never);
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/agents/1/credit" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.agentId).toBe("1");
+    expect(body.limit).toBe("50000000");
+    expect(body.limitFormatted).toBe("50.000000");
+    expect(body.record).toEqual({
+      totalBorrowed: "15000000",  // 10M + 5M (agent 1 only)
+      totalRepaid: "9500000",     // 4M + 5.5M
+      activeLoans: "1",           // status 4 only; status 5 is terminal
+      completedLoans: "3",        // loansRepaid from CreditRegistry
+      defaultedLoans: "1",        // loansDefaulted from CreditRegistry
+    });
+    // CreditRegistry must be queried by agentId (uint256), never by address
+    const calls = vi.mocked(rpc.readContract).mock.calls;
+    expect(calls[1][0]).toMatchObject({ functionName: "getLimit", args: [1n] });
+    expect(calls[2][0]).toMatchObject({ functionName: "credits", args: [1n] });
+  });
+});
+
+describe("GET /agents/:agentId/loans", () => {
+  const OWNER = "0x786d491fb520f3d9d9c7e62156c879fe52d6921e";
+
+  it("filters by on-chain agentId", async () => {
+    vi.mocked(rpc.getLogs).mockResolvedValueOnce([
+      { args: { loanId: 0n } },
+      { args: { loanId: 1n } },
+    ] as never);
+    vi.mocked(rpc.readContract)
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 10_000_000n, status: 4 })
+      .mockResolvedValueOnce({ agentId: 2n, borrower: OWNER, principal: 1_000_000n, status: 4 });
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/agents/1/loans" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject({
+      loanId: "0",
+      agentId: "1",
+      status: 4,
+      statusName: "Active",
+      principal: "10000000",
+      principalFormatted: "10.000000",
+    });
+  });
+
+  it("paginates after filtering", async () => {
+    vi.mocked(rpc.getLogs).mockResolvedValueOnce([
+      { args: { loanId: 0n } },
+      { args: { loanId: 1n } },
+    ] as never);
+    vi.mocked(rpc.readContract)
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 10_000_000n, status: 4 })
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 10_000_000n, status: 4 });
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/agents/1/loans?page=2&pageSize=1" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveLength(1);
+    expect(body[0].loanId).toBe("1");
+  });
+
+  it("queries the canonical LoanRequested fragment", async () => {
+    vi.mocked(rpc.getLogs).mockResolvedValueOnce([]);
+    const app = await buildApp();
+    await app.inject({ method: "GET", url: "/agents/1/loans" });
+    const params = vi.mocked(rpc.getLogs).mock.calls[0][0] as unknown as {
+      event: { name: string; inputs: Array<{ name: string; type: string; indexed: boolean }> };
+    };
+    expect(params.event.name).toBe("LoanRequested");
+    expect(params.event.inputs).toEqual([
+      { name: "loanId", type: "uint256", indexed: true },
+      { name: "borrower", type: "address", indexed: true },
+      { name: "principal", type: "uint256", indexed: false },
+      { name: "initialStatus", type: "uint8", indexed: false },
+    ]);
+  });
+});
+
+describe("GET /loans", () => {
+  const OWNER = "0x786d491fb520f3d9d9c7e62156c879fe52d6921e";
+
+  it("returns summaries from events plus getLoan", async () => {
+    vi.mocked(rpc.getLogs).mockResolvedValueOnce([{ args: { loanId: 0n } }] as never);
+    vi.mocked(rpc.readContract).mockResolvedValueOnce(
+      { agentId: 1n, borrower: OWNER, principal: 10_000_000n, status: 4 }
+    );
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/loans" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject({ loanId: "0", statusName: "Active" });
+    const params = vi.mocked(rpc.getLogs).mock.calls[0][0] as { event: { name: string } };
+    expect(params.event.name).toBe("LoanRequested");
+  });
+
+  it("falls back to default pagination on non-numeric params", async () => {
+    vi.mocked(rpc.getLogs).mockResolvedValueOnce([
+      { args: { loanId: 0n } },
+      { args: { loanId: 1n } },
+      { args: { loanId: 2n } },
+    ] as never);
+    vi.mocked(rpc.readContract)
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 1_000_000n, status: 4 })
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 1_000_000n, status: 4 })
+      .mockResolvedValueOnce({ agentId: 1n, borrower: OWNER, principal: 1_000_000n, status: 4 });
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/loans?page=abc&pageSize=abc" });
+    expect(res.statusCode).toBe(200);
+    // default pageSize (20) returns everything; NaN would return nothing
+    expect(JSON.parse(res.body)).toHaveLength(3);
+  });
+});
+
+describe("POST /loans/prepare — input hardening", () => {
+  const BASE = {
+    agentId: "1",
+    creditWallet: "0x786d491fb520f3d9d9c7e62156c879fe52d6921e",
+    principal: "10000000",
+    repaymentRateBps: 1000,
+    totalRepaymentDue: "11000000",
+    duration: "86400",
+    purpose: "test loan",
+    budget: [{ categoryId: "0x" + "00".repeat(32), cap: "10000000" }],
+    permittedRecipients: ["0x786d491fb520f3d9d9c7e62156c879fe52d6921e"],
+    milestoneAmounts: ["10000000"],
+    milestoneDescriptions: ["full disbursement"],
+    collateralAmount: "0",
+    collateralAsset: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+  };
+
+  async function post(body: Record<string, unknown>): Promise<{ statusCode: number; details: string }> {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/loans/prepare",
+      headers: { "content-type": "application/json" },
+      payload: body,
+    });
+    const parsed = JSON.parse(res.body) as { details?: string[] };
+    return { statusCode: res.statusCode, details: (parsed.details ?? []).join(" ") };
+  }
+
+  it("returns 400 (not 500) for non-integer agentId", async () => {
+    const { statusCode, details } = await post({ ...BASE, agentId: "abc" });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("agentId");
+  });
+
+  it("returns 400 for out-of-uint16 repaymentRateBps", async () => {
+    const { statusCode, details } = await post({ ...BASE, repaymentRateBps: 70000 });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("repaymentRateBps");
+  });
+
+  it("returns 400 for non-integer repaymentRateBps", async () => {
+    const { statusCode, details } = await post({ ...BASE, repaymentRateBps: 10.5 });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("repaymentRateBps");
+  });
+
+  it("returns 400 for non-bytes32 budget categoryId", async () => {
+    const { statusCode, details } = await post({
+      ...BASE,
+      budget: [{ categoryId: "0x1234", cap: "10000000" }],
+    });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("categoryId");
+  });
+
+  it("returns 400 when creditWallet is missing from permittedRecipients", async () => {
+    const { statusCode, details } = await post({
+      ...BASE,
+      permittedRecipients: ["0x1111111111111111111111111111111111111111"],
+    });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("permittedRecipients");
+  });
+
+  it("returns 400 (not 500) for invalid collateralAmount", async () => {
+    const { statusCode, details } = await post({ ...BASE, collateralAmount: "abc" });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("collateralAmount");
+  });
+
+  it("returns 400 (not 500) for invalid underwriterAmount", async () => {
+    const { statusCode, details } = await post({ ...BASE, underwriterAmount: "1.5" });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("underwriterAmount");
+  });
+
+  it("returns 400 for invalid underwriter address", async () => {
+    const { statusCode, details } = await post({ ...BASE, underwriter: "0xbad" });
+    expect(statusCode).toBe(400);
+    expect(details).toContain("underwriter");
+  });
+});
+
+describe("POST /loans/prepare — V4 mode (abiVersion route option)", () => {
+  const BASE = {
+    agentId: "1",
+    creditWallet: "0x786d491fb520f3d9d9c7e62156c879fe52d6921e",
+    principal: "10000000",
+    repaymentRateBps: 1000,
+    totalRepaymentDue: "11000000",
+    duration: "86400",
+    purpose: "test loan",
+    budget: [{ categoryId: "0x" + "00".repeat(32), cap: "10000000" }],
+    permittedRecipients: ["0x786d491fb520f3d9d9c7e62156c879fe52d6921e"],
+    milestoneAmounts: ["10000000"],
+    milestoneDescriptions: ["full disbursement"],
+    collateralAmount: "0",
+    collateralAsset: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+  };
+
+  async function postV4(body: Record<string, unknown>): Promise<{ statusCode: number; body: Record<string, unknown> }> {
+    const app = await buildApp({ prepareAbiVersion: "V4" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/loans/prepare",
+      headers: { "content-type": "application/json" },
+      payload: body,
+    });
+    return { statusCode: res.statusCode, body: JSON.parse(res.body) as Record<string, unknown> };
+  }
+
+  it("accepts directDisbursement:true and encodes the V4 16-field proposal", async () => {
+    const { statusCode, body } = await postV4({ ...BASE, directDisbursement: true });
+    expect(statusCode).toBe(200);
+    expect(body.abiVersion).toBe("V4");
+    expect(body.directDisbursement).toBe(true);
+    // The calldata must decode as V4 requestLoan with the flag set.
+    const decoded = decodeFunctionData({
+      abi: LoanRegistryAbi as unknown as Abi,
+      data: body.calldata as `0x${string}`,
+    });
+    expect(decoded.functionName).toBe("requestLoan");
+    const proposal = (decoded.args as Array<{ directDisbursement: boolean }>)[0];
+    expect(proposal.directDisbursement).toBe(true);
+  });
+
+  it("defaults directDisbursement to false when omitted in V4 mode", async () => {
+    const { statusCode, body } = await postV4({ ...BASE });
+    expect(statusCode).toBe(200);
+    expect(body.abiVersion).toBe("V4");
+    expect(body.directDisbursement).toBe(false);
+  });
+
+  it("returns 400 for non-boolean directDisbursement in V4 mode", async () => {
+    const { statusCode, body } = await postV4({ ...BASE, directDisbursement: "yes" });
+    expect(statusCode).toBe(400);
+    const details = ((body.details ?? []) as string[]).join(" ");
+    expect(details).toContain("directDisbursement");
+  });
+
+  it("stays on V3 behavior by default (rejects the field)", async () => {
+    // No option: the manifest (V3) decides.
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/loans/prepare",
+      headers: { "content-type": "application/json" },
+      payload: { ...BASE, directDisbursement: false },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/directDisbursement/);
+  });
+});
+
+describe("GET /loans/:loanId — directDisbursement flag", () => {
+  const VIEW = {
+    agentId: 1n,
+    borrower: "0x1111111111111111111111111111111111111111",
+    lender: "0x2222222222222222222222222222222222222222",
+    creditWallet: "0x786d491fb520f3d9d9c7e62156c879fe52d6921e",
+    principal: 10_000_000n,
+    totalRepaymentDue: 11_000_000n,
+    repaymentRateBps: 1000,
+    status: 4,
+    createdAt: 1000n,
+    expiresAt: 87400n,
+  };
+
+  function mockDetail(flag: unknown, flagRejects = false) {
+    const q = vi.mocked(rpc.readContract)
+      .mockResolvedValueOnce(1n)                                    // nextLoanId
+      .mockResolvedValueOnce(VIEW)                                  // getLoan
+      .mockResolvedValueOnce([])                                    // getMilestones
+      .mockResolvedValueOnce([])                                    // getBudget
+      .mockResolvedValueOnce(0n)                                    // getCollateralAmount
+      .mockResolvedValueOnce("0x0000000000000000000000000000000000000000"); // getCollateralAsset
+    if (flagRejects) q.mockRejectedValueOnce(new Error("execution reverted"));
+    else q.mockResolvedValueOnce(flag);
+  }
+
+  it("exposes directDisbursement:true from the V4 getter", async () => {
+    mockDetail(true);
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/loans/0" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.directDisbursement).toBe(true);
+    expect(body.principal).toBe("10000000");
+    expect(body.statusName).toBe("Active");
+  });
+
+  it("defaults to false when the getter is missing (V3 deployed)", async () => {
+    mockDetail(undefined, true);
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/loans/0" });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).directDisbursement).toBe(false);
   });
 });
 

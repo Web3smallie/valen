@@ -126,6 +126,8 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     error DefaultGraceNotElapsed();
     error NotAuthorized();
     error CallerNotAgentWallet();
+    error LoanDoesNotExist();
+    error ZeroPrincipal();
 
     // -------------------------------------------------------------------------
     // Modifiers
@@ -230,9 +232,18 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     // Proposal validation
     // -------------------------------------------------------------------------
 
+    /// @notice Loan existence invariant: every state-changing function taking
+    ///         a loanId must call this first. Never rely on status checks
+    ///         alone — Requested is the zero value, so unknown ids read as
+    ///         Requested by default.
+    function _requireExistingLoan(uint256 loanId) internal view {
+        if (loanId >= nextLoanId) revert LoanDoesNotExist();
+    }
+
     function _validateProposal(LoanProposal calldata proposal) internal view returns (bool needsApproval) {
         // 1. creditWallet zero-address guard (before any external calls).
         if (proposal.creditWallet == address(0)) revert ZeroAddress();
+        if (proposal.principal == 0) revert ZeroPrincipal();
 
         // 2. msg.sender must be an AgentRegistry-authorized wallet for proposal.agentId.
         if (!agentRegistry.isAuthorizedWallet(proposal.agentId, msg.sender)) {
@@ -304,6 +315,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
         Loan storage loan = _loans[loanId];
         loan.agentId          = proposal.agentId;
         loan.borrower         = msg.sender;
+        loan.lender           = address(0); // Defensive reset: a phantom-funded id may carry a squatted lender.
         loan.creditWallet     = proposal.creditWallet;
         loan.principal        = proposal.principal;
         loan.repaymentRateBps = proposal.repaymentRateBps;
@@ -366,6 +378,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     // -------------------------------------------------------------------------
 
     function approveLoan(uint256 loanId) external onlyOwner {
+        _requireExistingLoan(loanId);
         Loan storage loan = _loans[loanId];
         if (loan.status != LoanStatus.PendingApproval) revert LoanNotPendingApproval();
         loan.status = LoanStatus.Approved;
@@ -378,6 +391,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     // -------------------------------------------------------------------------
 
     function markFunded(uint256 loanId, address lender) external onlyVault {
+        _requireExistingLoan(loanId);
         Loan storage loan = _loans[loanId];
         if (loan.status != LoanStatus.Requested && loan.status != LoanStatus.Approved) {
             revert LoanNotRequestable();
@@ -393,6 +407,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
     // -------------------------------------------------------------------------
 
     function markMilestoneReleased(uint256 loanId, uint256 milestoneIndex) external onlyVault {
+        _requireExistingLoan(loanId);
         Loan storage loan = _loans[loanId];
         if (loan.milestones[milestoneIndex].released) revert MilestoneAlreadyReleased();
         loan.milestones[milestoneIndex].released = true;
@@ -405,6 +420,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
 
     function markDefault(uint256 loanId) external {
         if (msg.sender != owner() && !keepers[msg.sender]) revert NotAuthorized();
+        _requireExistingLoan(loanId);
         Loan storage loan = _loans[loanId];
         if (loan.status != LoanStatus.Active) revert LoanNotDefaultable();
         if (block.timestamp <= loan.expiresAt + defaultGracePeriod) revert DefaultGraceNotElapsed();
@@ -446,6 +462,7 @@ contract LoanRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILo
 
     function markRepaid(uint256 loanId) external {
         if (msg.sender != router) revert NotRouter();
+        _requireExistingLoan(loanId);
         Loan storage loan = _loans[loanId];
         if (loan.status != LoanStatus.Active && loan.status != LoanStatus.Defaulted) revert LoanNotActive();
         bool wasActive = loan.status == LoanStatus.Active;

@@ -5,6 +5,7 @@ import {
   validateUint,
   validateBytes32,
   loanStatusName,
+  parsePageParam,
   ValidationError,
 } from "../lib/format.js";
 
@@ -27,10 +28,23 @@ describe("formatUnits6", () => {
 
 describe("loanStatusName", () => {
   it("maps 0 → Requested",       () => expect(loanStatusName(0)).toBe("Requested"));
+  it("maps 1 → PendingApproval", () => expect(loanStatusName(1)).toBe("PendingApproval"));
+  it("maps 2 → Approved",        () => expect(loanStatusName(2)).toBe("Approved"));
+  it("maps 3 → Funded",          () => expect(loanStatusName(3)).toBe("Funded"));
   it("maps 4 → Active",          () => expect(loanStatusName(4)).toBe("Active"));
   it("maps 5 → Repaid",          () => expect(loanStatusName(5)).toBe("Repaid"));
   it("maps 6 → Defaulted",       () => expect(loanStatusName(6)).toBe("Defaulted"));
+  it("maps 7 → Expired",         () => expect(loanStatusName(7)).toBe("Expired"));
+  it("maps 8 → Cancelled",       () => expect(loanStatusName(8)).toBe("Cancelled"));
   it("maps unknown → Unknown(9)",() => expect(loanStatusName(9)).toBe("Unknown(9)"));
+});
+
+describe("parsePageParam", () => {
+  it("uses the default when missing",   () => expect(parsePageParam(undefined, 20, 50)).toBe(20));
+  it("falls back to default on NaN",    () => expect(parsePageParam("abc", 20, 50)).toBe(20));
+  it("clamps below 1 up to 1",          () => expect(parsePageParam("0", 1, 50)).toBe(1));
+  it("clamps above max down to max",    () => expect(parsePageParam("999", 20, 50)).toBe(50));
+  it("passes valid values through",     () => expect(parsePageParam("3", 1, 50)).toBe(3));
 });
 
 describe("validateAddress", () => {

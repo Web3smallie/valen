@@ -1,33 +1,34 @@
 import "dotenv/config";
 import type { Address } from "viem";
+import { getManifest, type Manifest } from "./manifest.js";
 
-function requireAddress(envVar: string): Address {
-  const value = process.env[envVar];
-  if (!value) throw new Error(`Missing required env var: ${envVar}`);
-  return value as Address;
-}
-
-function optionalAddress(envVar: string, fallback: string): Address {
-  return (process.env[envVar] ?? fallback) as Address;
-}
+/**
+ * Contract addresses resolve from the deployment manifest
+ * (deployments/<DEPLOYMENT>.json) — the single source of truth.
+ * There are no per-address environment overrides by design.
+ */
+export const manifest: Manifest = getManifest();
 
 export const contracts = {
-  agentRegistry:     requireAddress("AGENT_REGISTRY_ADDRESS"),
-  loanRegistry:      requireAddress("LOAN_REGISTRY_ADDRESS"),
-  loanVault:         requireAddress("LOAN_VAULT_ADDRESS"),
-  creditRegistry:    requireAddress("CREDIT_REGISTRY_ADDRESS"),
-  revenueRouter:     requireAddress("REVENUE_ROUTER_ADDRESS"),
-  collateralVault:   requireAddress("COLLATERAL_VAULT_ADDRESS"),
-  liquidityPool:     requireAddress("LIQUIDITY_POOL_ADDRESS"),
-  underwriterPool:   requireAddress("UNDERWRITER_POOL_ADDRESS"),
-  recipientRegistry: requireAddress("RECIPIENT_REGISTRY_ADDRESS"),
-  reservePool:       requireAddress("RESERVE_POOL_ADDRESS"),
-  activityAttester:  requireAddress("ACTIVITY_ATTESTER_ADDRESS"),
+  agentRegistry:     manifest.contracts.agentRegistry.address,
+  loanRegistry:      manifest.contracts.loanRegistry.address,
+  loanVault:         manifest.contracts.loanVault.address,
+  creditRegistry:    manifest.contracts.creditRegistry.address,
+  revenueRouter:     manifest.contracts.revenueRouter.address,
+  collateralVault:   manifest.contracts.collateralVault.address,
+  liquidityPool:     manifest.contracts.liquidityPool.address,
+  underwriterPool:   manifest.contracts.underwriterPool.address,
+  recipientRegistry: manifest.contracts.recipientRegistry.address,
+  reservePool:       manifest.contracts.reservePool.address,
+  activityAttester:  manifest.contracts.activityAttester.address,
 } as const;
 
 // Arc Testnet USDC: system precompile, 6 decimals.
 // arc-studio-allow-onchain-literal
-export const USDC_ADDRESS: Address = "0x3600000000000000000000000000000000000000";
+export const USDC_ADDRESS: Address = manifest.tokens.usdc.address;
 
-// EURC test token — address read from EURC_ADDRESS env var (see .env.example).
-export const EURC_ADDRESS: Address = requireAddress("EURC_ADDRESS");
+// EURC test token — address from the deployment manifest.
+export const EURC_ADDRESS: Address = manifest.tokens.eurc.address;
+
+// LoanRegistry ABI target from the deployment manifest.
+export const ABI_VERSION = manifest.abiVersion;

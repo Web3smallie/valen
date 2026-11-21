@@ -62,7 +62,7 @@ export function Sidebar() {
       {/* Wallet */}
       <div className="mt-4">
         <ConnectKitButton.Custom>
-          {({ isConnected, show, address, truncatedAddress }) => (
+          {({ isConnected, show, truncatedAddress }) => (
             <button
               onClick={show}
               className={cn(

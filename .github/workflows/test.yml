@@ -33,3 +33,30 @@ jobs:
 
       - name: Run Forge tests
         run: forge test -vvv
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install backend dependencies
+        # No lockfile exists yet (pre-existing gap), so plain install.
+        run: npm install --prefix backend --no-audit --no-fund
+
+      - name: Typecheck backend
+        run: npm run typecheck --prefix backend
+
+      - name: Run backend tests
+        # Hermetic: RPC is mocked and addresses resolve from the checked-in
+        # deployment manifest, so no .env or network access is required.
+        run: npm test --prefix backend

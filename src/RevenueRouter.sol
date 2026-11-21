@@ -73,6 +73,7 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
     error AgentRegistryAlreadySet();
     error CallerNotAgentWallet();
     error LoansAlreadyExist();
+    error LoanDoesNotExist();
 
     // -------------------------------------------------------------------------
     // Reentrancy
@@ -150,6 +151,7 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
     // -------------------------------------------------------------------------
 
     function payRevenue(uint256 loanId, uint256 amount) external nonReentrant {
+        if (loanId >= registry.nextLoanId()) revert LoanDoesNotExist();
         if (amount == 0) revert ZeroAmount();
 
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
@@ -172,6 +174,7 @@ contract RevenueRouter is Initializable, OwnableUpgradeable, UUPSUpgradeable, IR
     // -------------------------------------------------------------------------
 
     function repayLoan(uint256 loanId, uint256 amount) external nonReentrant {
+        if (loanId >= registry.nextLoanId()) revert LoanDoesNotExist();
         if (amount == 0) revert ZeroAmount();
 
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);

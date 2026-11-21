@@ -12,63 +12,33 @@ import { LoanRegistryAbi }       from "../abis/LoanRegistry.js";
 import { RevenueRouterAbi }      from "../abis/RevenueRouter.js";
 import { CollateralVaultAbi }    from "../abis/CollateralVault.js";
 import { LoanVaultAbi }          from "../abis/LoanVault.js";
-import { readContract, getLogs } from "../lib/rpc.js";
-import { validateUint, loanStatusName, formatUnits6 } from "../lib/format.js";
+import { readContract } from "../lib/rpc.js";
+import { fetchAllLoanIds, fetchLoanViews } from "../lib/loanEvents.js";
+import { validateUint, loanStatusName, formatUnits6, parsePageParam } from "../lib/format.js";
 
 export async function loanRoutes(app: FastifyInstance) {
 
   // ── GET /loans ────────────────────────────────────────────────────────────
-  // Returns LoanSummary[] — fetches events then getLoan for each item on the page.
+  // Returns LoanSummary[] — fetches LoanRequested events then getLoan for each
+  // item on the page.
   app.get<{ Querystring: { page?: string; pageSize?: string } }>("/loans", async (req) => {
-    const page     = Math.max(1, parseInt(req.query.page ?? "1", 10));
-    const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize ?? "20", 10)));
+    const page     = parsePageParam(req.query.page, 1, Number.MAX_SAFE_INTEGER);
+    const pageSize = parsePageParam(req.query.pageSize, 20, 50);
 
-    const logs = await getLogs({
-      address: contracts.loanRegistry,
-      event: {
-        type: "event",
-        name: "LoanRequested",
-        inputs: [
-          { name: "loanId",   type: "uint256", indexed: true  },
-          { name: "agentId",  type: "uint256", indexed: true  },
-          { name: "borrower", type: "address", indexed: false },
-        ],
-      },
-      fromBlock: 0n,
-      toBlock:   "latest",
-    });
-
-    type LoanReqLog = { args?: { loanId?: bigint; agentId?: bigint; borrower?: string } };
-    const allIds = logs.map((l) => (l as unknown as LoanReqLog).args?.loanId ?? 0n);
-    const total  = allIds.length;
+    const allIds = await fetchAllLoanIds();
     const start  = (page - 1) * pageSize;
     const slice  = allIds.slice(start, start + pageSize);
+    const withViews = await fetchLoanViews(slice);
 
-    const summaries = await Promise.all(
-      slice.map(async (loanId) => {
-        const loan = await readContract({
-          address: contracts.loanRegistry,
-          abi:     LoanRegistryAbi,
-          functionName: "getLoan",
-          args: [loanId],
-        }) as {
-          agentId: bigint; borrower: string; principal: bigint;
-          status: number;
-        };
-
-        return {
-          loanId:             loanId.toString(),
-          borrower:           loan.borrower,
-          agentId:            loan.agentId.toString(),
-          status:             loan.status,
-          statusName:         loanStatusName(loan.status),
-          principal:          loan.principal.toString(),
-          principalFormatted: formatUnits6(loan.principal),
-        };
-      })
-    );
-
-    return summaries;
+    return withViews.map(({ loanId, view }) => ({
+      loanId:             loanId.toString(),
+      borrower:           view.borrower,
+      agentId:            view.agentId.toString(),
+      status:             view.status,
+      statusName:         loanStatusName(view.status),
+      principal:          view.principal.toString(),
+      principalFormatted: formatUnits6(view.principal),
+    }));
   });
 
   // ── GET /loans/:loanId ────────────────────────────────────────────────────
@@ -94,6 +64,21 @@ export async function loanRoutes(app: FastifyInstance) {
       readContract({ address: contracts.loanRegistry, abi: LoanRegistryAbi, functionName: "getCollateralAsset",  args: [loanId] }) as Promise<string>,
     ]);
 
+    // getDirectDisbursement exists only on V4. The deployed V3 contract lacks
+    // the getter, so a failed read means "milestone loan", not an error —
+    // default to false instead of failing the whole response.
+    let directDisbursement = false;
+    try {
+      directDisbursement = await readContract({
+        address: contracts.loanRegistry,
+        abi:     LoanRegistryAbi,
+        functionName: "getDirectDisbursement",
+        args: [loanId],
+      }) as boolean;
+    } catch {
+      directDisbursement = false;
+    }
+
     const l = loan as {
       agentId: bigint; borrower: string; lender: string; creditWallet: string;
       principal: bigint; totalRepaymentDue: bigint; repaymentRateBps: number;
@@ -118,6 +103,7 @@ export async function loanRoutes(app: FastifyInstance) {
       repaymentRateBps:            l.repaymentRateBps.toString(),
       status:                      l.status,
       statusName:                  loanStatusName(l.status),
+      directDisbursement,
       duration,
       startTimestamp:              l.createdAt.toString(),
       collateralAmount:            collateralAmount.toString(),

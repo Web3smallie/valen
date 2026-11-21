@@ -55,8 +55,8 @@ export const CreditRegistryAbi = [
     "inputs": [
       {
         "name": "",
-        "type": "address",
-        "internalType": "address"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -79,6 +79,16 @@ export const CreditRegistryAbi = [
         "name": "exists",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "activityLimit",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "activityAttested",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -114,9 +124,9 @@ export const CreditRegistryAbi = [
     "name": "getLimit",
     "inputs": [
       {
-        "name": "agent",
-        "type": "address",
-        "internalType": "address"
+        "name": "agentId",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [

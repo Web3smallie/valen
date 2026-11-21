@@ -75,7 +75,7 @@ export function Integration() {
 import { privateKeyToAccount } from 'viem/accounts'
 
 const arcTestnet = {
-  id: 5003012,
+  id: 5042002,
   name: 'Arc Testnet',
   rpcUrls: { default: { http: ['https://rpc.testnet.arc.io'] } },
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
@@ -143,13 +143,13 @@ await walletClient.writeContract({
     totalRepaymentDue: 11_000_000n,    // 11 USDC
     duration: 86400n,                  // 1 day
     purpose: 'working capital',
-    budget: [{ categoryId: '0x0000…', amount: 10_000_000n }],
+    budget: [{ categoryId: '0x0000000000000000000000000000000000000000000000000000000000000000', cap: 10_000_000n }],
     permittedRecipients: [account.address],
     milestoneAmounts: [10_000_000n],
     milestoneDescriptions: ['full disbursement'],
     collateralAmount: 14_029_180n,     // requiredCollateral(10e6, EURC)
     collateralAsset: EURC,
-    underwriter: '0x0000…0000',
+    underwriter: '0x0000000000000000000000000000000000000000',
     underwriterAmount: 0n,
   }],
 })`} />

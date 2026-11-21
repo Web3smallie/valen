@@ -616,14 +616,43 @@ contract DirectDisbursementTest is Test {
         vm.prank(borrower);
         collateralVault.depositCollateral(address(usdc), collAmount);
 
-        // Build proposal with a non-approved creditWallet
-        ILoanRegistry.LoanProposal memory p = _buildDirectProposal(principal, address(usdc), collAmount);
+        // Attacker is an authorized agent wallet (passes validation step 3)
+        // but is NOT RecipientRegistry-approved (must fail step 4).
         address attacker = address(0xBAD);
+        vm.prank(borrower);
+        agentReg.addWallet(agentId, attacker);
+
+        ILoanRegistry.LoanProposal memory p = _buildDirectProposal(principal, address(usdc), collAmount);
         p.creditWallet = attacker;
         p.permittedRecipients = _one(attacker);
 
         vm.prank(borrower);
-        vm.expectRevert(); // UnapprovedRecipient — attacker not in RecipientRegistry
+        vm.expectRevert(LoanRegistry.UnapprovedRecipient.selector);
+        registry.requestLoan(p);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // H2. Non-wallet creditWallet fails agent authorization (validation step 3)
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function test_H2_NonWalletCreditWallet_CannotRequest() public {
+        uint256 principal = 100e6;
+        uint256 collAmount = _requiredUsdc(principal);
+
+        vm.prank(borrower);
+        usdc.approve(address(collateralVault), collAmount);
+        vm.prank(borrower);
+        collateralVault.depositCollateral(address(usdc), collAmount);
+
+        // Attacker is neither an authorized wallet nor an approved recipient —
+        // the agent-wallet check (step 3) fires before recipient approval (step 4).
+        address attacker = address(0xBAD);
+        ILoanRegistry.LoanProposal memory p = _buildDirectProposal(principal, address(usdc), collAmount);
+        p.creditWallet = attacker;
+        p.permittedRecipients = _one(attacker);
+
+        vm.prank(borrower);
+        vm.expectRevert(LoanRegistry.CreditWalletNotAgentWallet.selector);
         registry.requestLoan(p);
     }
 
@@ -798,5 +827,249 @@ contract DirectDisbursementTest is Test {
         vm.prank(borrower);
         uint256 loanId = registry.requestLoan(_buildMilestoneProposal(100e6));
         assertFalse(registry.getDirectDisbursement(loanId), "default should be false");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // M. Underwriter-backed direct disbursement — full lifecycle.
+    //    Direct disbursement is NOT restricted to collateralized loans: an
+    //    underwriter-backed loan may also disburse immediately. This pins that
+    //    behavior: immediate payout, standard repayment, stake released.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function test_M_UnderwriterBacked_DirectDisbursement_FullLifecycle() public {
+        address underwriter = address(0xE1);
+        uint256 principal = 100e6;
+        uint256 stake = 100e6;
+        uint256 repaymentDue = principal + principal / 10;
+
+        // Underwriter deposits stake and commits to this borrower.
+        // Effective limit = 5e6 (initial) + 100e6 (stake) >= 100e6 principal.
+        usdc.mint(underwriter, stake);
+        vm.prank(underwriter);
+        usdc.approve(address(underwriterPool), stake);
+        vm.prank(underwriter);
+        underwriterPool.depositStake(stake);
+        vm.prank(underwriter);
+        underwriterPool.commitToAgent(borrower, stake);
+
+        // Direct proposal with underwriter backing and no collateral.
+        ILoanRegistry.LoanProposal memory p = _buildDirectProposal(principal, address(0), 0);
+        p.underwriter = underwriter;
+        p.underwriterAmount = stake;
+        vm.prank(borrower);
+        uint256 loanId = registry.requestLoan(p);
+
+        assertTrue(registry.getDirectDisbursement(loanId), "not direct");
+        assertEq(registry.getUnderwriterAmount(loanId), stake, "underwriterAmount wrong");
+
+        // Fund (P2P) — immediate payout, nothing locked.
+        uint256 creditWalletBefore = usdc.balanceOf(creditWallet);
+        vm.prank(lender);
+        usdc.approve(address(vault), principal);
+        vm.prank(lender);
+        vault.fundLoan(loanId);
+        assertEq(
+            usdc.balanceOf(creditWallet),
+            creditWalletBefore + principal,
+            "underwriter-backed direct loan: no immediate payout"
+        );
+        assertEq(vault.lockedAmount(loanId), 0, "lockedAmount should be zero");
+
+        // Repay in full — stake released back to the underwriter.
+        vm.prank(borrower);
+        usdc.approve(address(router), repaymentDue);
+        vm.prank(borrower);
+        router.repayLoan(loanId, repaymentDue);
+        assertEq(
+            uint8(registry.getLoan(loanId).status),
+            uint8(ILoanRegistry.LoanStatus.Repaid),
+            "not Repaid"
+        );
+        (, , bool uResolved) = underwriterPool.reservations(loanId);
+        assertTrue(uResolved, "underwriter stake not released");
+        assertEq(underwriterPool.stakeBalance(underwriter), stake, "stake not restored");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // N. Unsecured (credit-only) direct disbursement — allowed and pinned.
+    //    Direct disbursement is NOT restricted to collateralized loans: a
+    //    credit-worthy agent may receive an immediate payout against its
+    //    limit. This pins that behavior: allowed, immediate payout, no
+    //    collateral reservation created, standard repayment.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function test_N_UnsecuredDirectDisbursement_CreditBased_FullLifecycle() public {
+        _seedCredit(5_000e6);
+        uint256 principal = 500e6;
+        uint256 repaymentDue = principal + principal / 10;
+
+        // Direct proposal with neither collateral nor underwriter.
+        ILoanRegistry.LoanProposal memory p = _buildDirectProposal(principal, address(0), 0);
+        vm.prank(borrower);
+        uint256 loanId = registry.requestLoan(p);
+
+        assertTrue(registry.getDirectDisbursement(loanId), "not direct");
+        assertEq(registry.getCollateralAmount(loanId), 0, "unexpected collateral");
+        assertEq(registry.getUnderwriterAmount(loanId), 0, "unexpected underwriter backing");
+
+        // Fund (P2P) — immediate payout, nothing locked.
+        uint256 creditWalletBefore = usdc.balanceOf(creditWallet);
+        vm.prank(lender);
+        usdc.approve(address(vault), principal);
+        vm.prank(lender);
+        vault.fundLoan(loanId);
+        assertEq(
+            usdc.balanceOf(creditWallet),
+            creditWalletBefore + principal,
+            "unsecured direct loan: no immediate payout"
+        );
+        assertEq(vault.lockedAmount(loanId), 0, "lockedAmount should be zero");
+
+        // No collateral reservation was created.
+        (, , uint256 rAmount, bool rResolved) = collateralVault.reservations(loanId);
+        assertEq(rAmount, 0, "unexpected collateral reservation");
+        assertFalse(rResolved, "unexpected collateral resolution");
+
+        // Repay in full.
+        vm.prank(borrower);
+        usdc.approve(address(router), repaymentDue);
+        vm.prank(borrower);
+        router.repayLoan(loanId, repaymentDue);
+        assertEq(
+            uint8(registry.getLoan(loanId).status),
+            uint8(ILoanRegistry.LoanStatus.Repaid),
+            "not Repaid"
+        );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // O. settleExpiredLoan on a direct loan reverts (nothing is locked).
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function test_O_SettleExpiredLoan_RevertsWhenNothingLocked_Direct() public {
+        uint256 principal = 100e6;
+        uint256 collAmount = _requiredUsdc(principal);
+
+        vm.prank(borrower);
+        usdc.approve(address(collateralVault), collAmount);
+        vm.prank(borrower);
+        collateralVault.depositCollateral(address(usdc), collAmount);
+
+        vm.prank(borrower);
+        uint256 loanId = registry.requestLoan(
+            _buildDirectProposal(principal, address(usdc), collAmount)
+        );
+
+        vm.prank(lender);
+        usdc.approve(address(vault), principal);
+        vm.prank(lender);
+        vault.fundLoan(loanId);
+
+        // Past expiry, still Active, but lockedAmount is zero.
+        ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
+        vm.warp(loan.expiresAt + 1);
+
+        vm.expectRevert(LoanVault.NothingToSettle.selector);
+        vault.settleExpiredLoan(loanId);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // P. DirectDisbursementSent is emitted on both funding paths.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function test_P_DirectDisbursementSent_EmittedOnBothFundPaths() public {
+        uint256 principal = 100e6;
+        uint256 collAmount = _requiredUsdc(principal);
+
+        // ── P2P path ──
+        vm.prank(borrower);
+        usdc.approve(address(collateralVault), collAmount);
+        vm.prank(borrower);
+        collateralVault.depositCollateral(address(usdc), collAmount);
+
+        vm.prank(borrower);
+        uint256 loanId0 = registry.requestLoan(
+            _buildDirectProposal(principal, address(usdc), collAmount)
+        );
+
+        vm.prank(lender);
+        usdc.approve(address(vault), principal);
+        // fundLoan emits LoanFundedInVault first, then DirectDisbursementSent.
+        vm.expectEmit(true, true, false, true);
+        emit LoanVault.LoanFundedInVault(loanId0, lender, principal);
+        vm.expectEmit(true, true, false, true);
+        emit LoanVault.DirectDisbursementSent(loanId0, creditWallet, principal);
+        vm.prank(lender);
+        vault.fundLoan(loanId0);
+
+        // ── Pool path ──
+        usdc.mint(owner, 500_000e6);
+        vm.prank(owner);
+        usdc.approve(address(liquidityPool), 500_000e6);
+        vm.prank(owner);
+        liquidityPool.initializeLiquidity(500_000e6);
+
+        // Fresh deposit: loan 0's reservation consumed the first one.
+        vm.prank(borrower);
+        usdc.approve(address(collateralVault), collAmount);
+        vm.prank(borrower);
+        collateralVault.depositCollateral(address(usdc), collAmount);
+
+        vm.prank(borrower);
+        uint256 loanId1 = registry.requestLoan(
+            _buildDirectProposal(principal, address(usdc), collAmount)
+        );
+
+        vm.expectEmit(true, true, false, true);
+        emit LoanVault.LoanFundedInVault(loanId1, address(liquidityPool), principal);
+        vm.expectEmit(true, true, false, true);
+        emit LoanVault.DirectDisbursementSent(loanId1, creditWallet, principal);
+        vm.prank(owner);
+        vault.fundFromPool(loanId1);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Q. UUPS upgrade preserves existing loans: flag defaults false and the
+    //    milestone flow keeps working after the implementation is replaced.
+    //    (This covers proxy-upgrade mechanics and the zero default. The V3→V4
+    //    struct append itself is a review-verified append-only change; V3
+    //    bytecode is not available in-repo for a literal V3→V4 test.)
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function test_Q_UUPSUpgrade_PreservesLoansAndFlag() public {
+        _seedCredit(5_000e6);
+        uint256 principal = 100e6;
+
+        // Create and fund a milestone loan BEFORE the upgrade.
+        vm.prank(borrower);
+        uint256 loanId = registry.requestLoan(_buildMilestoneProposal(principal));
+        vm.prank(lender);
+        usdc.approve(address(vault), principal);
+        vm.prank(lender);
+        vault.fundLoan(loanId);
+
+        ILoanRegistry.LoanView memory before = registry.getLoan(loanId);
+        uint256 lockedBefore = vault.lockedAmount(loanId);
+
+        // Upgrade both implementations — registry FIRST, then vault
+        // (see docs/v4-upgrade-runbook.md for the ordering requirement).
+        vm.startPrank(owner);
+        registry.upgradeToAndCall(address(new LoanRegistry()), "");
+        vault.upgradeToAndCall(address(new LoanVault()), "");
+        vm.stopPrank();
+
+        // State preserved; flag defaults to false for the pre-existing loan.
+        assertFalse(registry.getDirectDisbursement(loanId), "flag must default false");
+        ILoanRegistry.LoanView memory afterUpgrade = registry.getLoan(loanId);
+        assertEq(afterUpgrade.principal, before.principal, "principal changed");
+        assertEq(uint8(afterUpgrade.status), uint8(before.status), "status changed");
+        assertEq(afterUpgrade.borrower, before.borrower, "borrower changed");
+        assertEq(afterUpgrade.creditWallet, before.creditWallet, "creditWallet changed");
+        assertEq(vault.lockedAmount(loanId), lockedBefore, "lockedAmount changed");
+
+        // Milestone release still works after the upgrade.
+        vm.prank(lender);
+        vault.releaseMilestone(loanId, 0);
+        assertEq(usdc.balanceOf(creditWallet), principal, "milestone release broken after upgrade");
     }
 }
