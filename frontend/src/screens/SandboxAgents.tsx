@@ -225,12 +225,17 @@ function AgentCard({ agent, onSelect, selected }: {
 
 function AgentDetail({ agent }: { agent: SandboxAgent }) {
   const navigate = useNavigate()
-  const credit = useApi(
-    () => agent.deployed && agent.wallet
-      ? api.credit('1')
-      : Promise.reject(new Error('not deployed')),
+  // Resolve the on-chain agentId from the deployed wallet first — never assume #1.
+  const agentState = useApi(
+    async () => {
+      if (!agent.deployed || !agent.wallet) throw new Error('not deployed')
+      const identity = await api.agent(agent.wallet)
+      const credit = await api.credit(identity.agentId)
+      return { identity, credit }
+    },
     [agent.id],
   )
+  const resolvedId = agentState.data?.identity.agentId
 
   return (
     <Card className="h-full">
@@ -239,9 +244,9 @@ function AgentDetail({ agent }: { agent: SandboxAgent }) {
           <h2 className="text-base font-semibold text-[var(--ink)]">{agent.name}</h2>
           <p className="text-xs text-[var(--muted)]">{agent.category}</p>
         </div>
-        {agent.deployed && (
+        {agent.deployed && resolvedId && (
           <button
-            onClick={() => navigate('/agents/1')}
+            onClick={() => navigate(`/agents/${resolvedId}`)}
             className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
           >
             Full details <ExternalLink className="w-3 h-3" />
@@ -257,14 +262,16 @@ function AgentDetail({ agent }: { agent: SandboxAgent }) {
         } />
         <StatRow label="Identity" value={
           agent.deployed
-            ? <Badge variant="success">Registered Agent #1</Badge>
+            ? resolvedId
+              ? <Badge variant="success">Registered Agent #{resolvedId}</Badge>
+              : <Badge variant="neutral">resolving…</Badge>
             : <Badge variant="neutral">illustrative</Badge>
         } />
         <StatRow label="Credit limit" value={
           !agent.deployed ? '—' :
-          credit.isLoading ? '…' :
-          credit.data ? credit.data.limitFormatted :
-          <span className="text-[var(--muted)] text-[11px]">{credit.error ?? 'unavailable'}</span>
+          agentState.isLoading ? '…' :
+          agentState.data ? agentState.data.credit.limitFormatted :
+          <span className="text-[var(--muted)] text-[11px]">{agentState.error ?? 'unavailable'}</span>
         } />
       </div>
 

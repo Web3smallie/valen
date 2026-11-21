@@ -1,0 +1,78 @@
+{
+  "deployment": "arc-testnet",
+  "chainId": 5042002,
+  "abiVersion": "V3",
+  "deployer": "0xB0E8Ba6aFe21371AD4001e611224FC200FD10144",
+  "verified": {
+    "method": "read-only RPC: bytecode, ERC1967 slots, bidirectional wiring, params, live state",
+    "note": "Single authoritative source for Valen contract addresses. Backend loads this file; no per-address env overrides exist by design."
+  },
+  "contracts": {
+    "agentRegistry": {
+      "address": "0xeC74944752Fff0f53Af5b727F288f59435C0144e",
+      "proxy": true,
+      "implementation": "0x797e0fcc4d05e2c606cc66c484418b602951cced"
+    },
+    "loanRegistry": {
+      "address": "0x253B68c7a2D646561387Dc0958A6C176a30a6f8d",
+      "proxy": true,
+      "implementation": "0xd47496361e5c485611718bd06065971691d2ba07"
+    },
+    "loanVault": {
+      "address": "0x6F77979c0e2f6f8073FD6555c9A9d5883786AE19",
+      "proxy": true,
+      "implementation": "0xa698d80e5caf0b4b5033cd8091f1a37f98534537"
+    },
+    "creditRegistry": {
+      "address": "0x258B0678b30E2d32034389cfeCa7f58fE1CeB897",
+      "proxy": true,
+      "implementation": "0xf400dadaf8b01d16f5da65a2769a6b6e60dee1cd"
+    },
+    "revenueRouter": {
+      "address": "0xE0B9b39E72f73f2d85D77a1e24a2f319246de822",
+      "proxy": true,
+      "implementation": "0x394d9f57f00f27b19b1549e23021efed9cd7be38"
+    },
+    "collateralVault": {
+      "address": "0xC49999B7d32F1B1Df28d53efAdee450A0Fd7dA2f",
+      "proxy": true,
+      "implementation": "0x9c1b6819b32615ca4d28d41be2a10303425b9ba5"
+    },
+    "liquidityPool": {
+      "address": "0x04B22AD06256cFdD32546aCC6c40bFF9C3eFd061",
+      "proxy": true,
+      "implementation": "0x828525794b195329e8f1ae501a61d7590df542c1"
+    },
+    "underwriterPool": {
+      "address": "0x23307d061dad8335995080518B73A839Ffe69E7A",
+      "proxy": true,
+      "implementation": "0x49b018d11b869d7964c2c560c5dd233e64f2aa32"
+    },
+    "recipientRegistry": {
+      "address": "0xf8E069B659CEAf9c68318041D727b5c482Ac6374",
+      "proxy": true,
+      "implementation": "0xe10598c039dd26609e0758bf737a68c9fae15f54"
+    },
+    "reservePool": {
+      "address": "0xe741d95aa64F125f75cB14E90d4b1cF96618f0fD",
+      "proxy": true,
+      "implementation": "0x9d488e961bdcb2fb00bfb7984605d3c00dae7dd7"
+    },
+    "activityAttester": {
+      "address": "0x2660044E4A7316B65263ea1B23b80aAf09841196",
+      "proxy": true,
+      "implementation": "0x6e119483041ff34b72db722b1c6cd2324b036dd4"
+    }
+  },
+  "tokens": {
+    "usdc": {
+      "address": "0x3600000000000000000000000000000000000000",
+      "decimals": 6,
+      "note": "Arc system precompile"
+    },
+    "eurc": {
+      "address": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+      "decimals": 6
+    }
+  }
+}

@@ -19,11 +19,12 @@ export const LOAN_STATUS: Record<number, string> = {
   0: "Requested",
   1: "PendingApproval",
   2: "Approved",
-  3: "Rejected",
+  3: "Funded",
   4: "Active",
   5: "Repaid",
   6: "Defaulted",
-  7: "Cancelled",
+  7: "Expired",
+  8: "Cancelled",
 };
 
 export function loanStatusName(status: number): string {
@@ -51,6 +52,17 @@ export function validateBytes32(value: string, field = "hash"): `0x${string}` {
     throw new ValidationError(`Invalid ${field}: "${value}"`);
   }
   return value.toLowerCase() as `0x${string}`;
+}
+
+/**
+ * Parse a 1-based pagination query param (?page, ?pageSize).
+ * Non-numeric or missing values fall back to `def`; the result is clamped
+ * to [1, max]. (Math.max alone propagates NaN, so NaN must be handled first.)
+ */
+export function parsePageParam(value: string | undefined, def: number, max: number): number {
+  const n = parseInt(value ?? String(def), 10);
+  const safe = Number.isNaN(n) ? def : n;
+  return Math.min(max, Math.max(1, safe));
 }
 
 export class ValidationError extends Error {

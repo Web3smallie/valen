@@ -11,7 +11,6 @@ import { api } from '@/lib/api'
 import { shortAddr, fmtUsdc, loanStatusInfo } from '@/lib/format'
 
 const ARC_EXPLORER = 'https://explorer.testnet.arc.io'
-const TEST_WALLET = '0x786d491Fb520F3D9D9c7e62156C879fe52d6921E'
 
 export function AgentDetails() {
   const { agentId } = useParams<{ agentId: string }>()
@@ -19,6 +18,7 @@ export function AgentDetails() {
 
   const credit = useApi(() => api.credit(id), [id])
   const loans = useApi(() => api.agentLoans(id), [id])
+  const identity = useApi(() => api.agentIdentity(id), [id])
 
   const isLoading = credit.isLoading || loans.isLoading
   const isError = credit.isError && loans.isError
@@ -65,15 +65,18 @@ export function AgentDetails() {
             <div className="space-y-0">
               <StatRow label="Network" value="Arc Testnet" />
               <StatRow label="Registered Wallet" value={
-                <a
-                  href={`${ARC_EXPLORER}/address/${TEST_WALLET}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 text-[var(--accent)] hover:underline mono text-[10px]"
-                >
-                  {shortAddr(TEST_WALLET)}
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                identity.isLoading ? '…' :
+                identity.data ? (
+                  <a
+                    href={`${ARC_EXPLORER}/address/${identity.data.owner}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-[var(--accent)] hover:underline mono text-[10px]"
+                  >
+                    {shortAddr(identity.data.owner)}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : <span className="text-[var(--muted)] text-[11px]">{identity.error ?? 'unavailable'}</span>
               } />
               <StatRow label="Agent type" value="Autonomous / programmatic" />
               <StatRow label="Onboarding" value={<Badge variant="success">Registered</Badge>} />

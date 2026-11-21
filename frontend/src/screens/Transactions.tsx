@@ -82,6 +82,11 @@ function LoanDetailView({ loanId }: { loanId: string }) {
             <StatRow label="Total Repayment Due" value={loan.data.totalRepaymentDueFormatted} />
             <StatRow label="Repayment Rate" value={`${Number(loan.data.repaymentRateBps) / 100}%`} />
             <StatRow label="Duration" value={`${Number(loan.data.duration) / 86400}d`} />
+            <StatRow label="Disbursement" value={
+              loan.data.directDisbursement === true
+                ? <Badge variant="accent">Direct — full amount at funding</Badge>
+                : <Badge variant="neutral">Milestone-based</Badge>
+            } />
             <StatRow label="Borrower" value={
               <a href={`${ARC_EXPLORER}/address/${loan.data.borrower}`} target="_blank" rel="noreferrer"
                  className="flex items-center gap-1 text-[var(--accent)] hover:underline mono text-[10px]">

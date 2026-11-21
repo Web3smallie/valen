@@ -46,6 +46,7 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error ActiveLoansExist();
     error LiquidityPoolNotSet();
     error DirectLoanCannotReleaseMilestone();
+    error LoanDoesNotExist();
 
     /// @notice Emitted when directDisbursement == true and the full principal is
     ///         sent to creditWallet immediately at funding time.
@@ -86,9 +87,21 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit LiquidityPoolSet(_liquidityPool);
     }
 
+    // -------------------------------------------------------------------------
+    // UUPS upgrade ordering (V4 direct disbursement)
+    // -------------------------------------------------------------------------
+    // fundLoan, fundFromPool, and releaseMilestone all call
+    // registry.getDirectDisbursement(), which exists only on the V4
+    // LoanRegistry implementation. Therefore the LoanRegistry implementation
+    // MUST be upgraded before the LoanVault implementation: a V4 vault
+    // pointed at a V3 registry reverts on every funding/release call, while
+    // a V3 vault pointed at a V4 registry degrades gracefully (direct loans
+    // are simply handled as milestone loans). See docs/v4-upgrade-runbook.md.
+
     /// @notice Direct P2P funding path — unchanged. A specific caller
     ///         funds a specific loan with their own USDC.
     function fundLoan(uint256 loanId) external nonReentrant {
+        if (loanId >= registry.nextLoanId()) revert LoanDoesNotExist();
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
         if (loan.status != ILoanRegistry.LoanStatus.Requested && loan.status != ILoanRegistry.LoanStatus.Approved) {
             revert LoanNotFundable();
@@ -101,11 +114,12 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         // Direct-disbursement path: transfer full principal to creditWallet
         // immediately, skipping per-milestone release. lockedAmount stays
-        // zero so releaseMilestone cannot double-pay.
+        // zero so releaseMilestone cannot double-pay. loan.creditWallet is
+        // used directly — it is immutable after requestLoan, so no re-fetch
+        // is needed.
         if (registry.getDirectDisbursement(loanId)) {
-            ILoanRegistry.LoanView memory funded = registry.getLoan(loanId);
-            usdc.safeTransfer(funded.creditWallet, loan.principal);
-            emit DirectDisbursementSent(loanId, funded.creditWallet, loan.principal);
+            usdc.safeTransfer(loan.creditWallet, loan.principal);
+            emit DirectDisbursementSent(loanId, loan.creditWallet, loan.principal);
         } else {
             lockedAmount[loanId] = loan.principal;
         }
@@ -121,6 +135,7 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ///         operator should decide which loans receive pool funding
     ///         (RISK-05 fix).
     function fundFromPool(uint256 loanId) external onlyOwner nonReentrant {
+        if (loanId >= registry.nextLoanId()) revert LoanDoesNotExist();
         if (liquidityPool == address(0)) revert LiquidityPoolNotSet();
 
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
@@ -135,10 +150,11 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         // Direct-disbursement path: LiquidityPool sent funds to LoanVault;
         // immediately forward them to creditWallet. lockedAmount stays zero.
+        // loan.creditWallet is used directly — it is immutable after
+        // requestLoan, so no re-fetch is needed.
         if (registry.getDirectDisbursement(loanId)) {
-            ILoanRegistry.LoanView memory funded = registry.getLoan(loanId);
-            usdc.safeTransfer(funded.creditWallet, loan.principal);
-            emit DirectDisbursementSent(loanId, funded.creditWallet, loan.principal);
+            usdc.safeTransfer(loan.creditWallet, loan.principal);
+            emit DirectDisbursementSent(loanId, loan.creditWallet, loan.principal);
         } else {
             lockedAmount[loanId] = loan.principal;
         }
@@ -151,6 +167,7 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ///         Valen backend) is permitted to attest on the pool's behalf.
     ///         This is the one authorization change pooled funding required.
     function releaseMilestone(uint256 loanId, uint256 milestoneIndex) external nonReentrant {
+        if (loanId >= registry.nextLoanId()) revert LoanDoesNotExist();
         // Direct-disbursement loans have no locked funds to release via milestones.
         if (registry.getDirectDisbursement(loanId)) revert DirectLoanCannotReleaseMilestone();
 
@@ -175,6 +192,7 @@ contract LoanVault is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function settleExpiredLoan(uint256 loanId) external nonReentrant {
+        if (loanId >= registry.nextLoanId()) revert LoanDoesNotExist();
         ILoanRegistry.LoanView memory loan = registry.getLoan(loanId);
         if (block.timestamp < loan.expiresAt) revert LoanNotExpired();
         // Accept both Active (normal expiry) and Defaulted (RISK-01 fix: markDefault()

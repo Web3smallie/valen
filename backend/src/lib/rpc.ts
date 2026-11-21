@@ -27,9 +27,12 @@ export async function readContract<
     return await publicClient.readContract(params as Parameters<typeof publicClient.readContract>[0]);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Propagate revert-like errors as 404 (record doesn't exist), others as 502
+    // A revert means the contract rejected the call (bad argument, unapproved
+    // asset, missing record) — report it as 422 with the message preserved so
+    // genuine misconfiguration is never masked as "not found". Routes that can
+    // distinguish absence (nextLoanId / agentOwner checks) return 404 themselves.
     if (msg.includes("revert") || msg.includes("execution reverted")) {
-      throw new RpcError(`Contract read reverted: ${msg}`, 404);
+      throw new RpcError(`Contract read reverted: ${msg}`, 422);
     }
     throw new RpcError(`RPC error: ${msg}`, 502);
   }

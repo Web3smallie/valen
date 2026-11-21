@@ -9,10 +9,12 @@ import type { FastifyInstance } from "fastify";
 import { contracts }             from "../config/contracts.js";
 import { AgentRegistryAbi }      from "../abis/AgentRegistry.js";
 import { CreditRegistryAbi }     from "../abis/CreditRegistry.js";
-import { LoanRegistryAbi }       from "../abis/LoanRegistry.js";
-import { readContract, getLogs } from "../lib/rpc.js";
+import { readContract }          from "../lib/rpc.js";
 import {
-  validateAddress, validateUint, formatUnits6, loanStatusName,
+  fetchAllLoanIds, fetchLoanViews, fetchAgentLoanStats,
+} from "../lib/loanEvents.js";
+import {
+  validateAddress, validateUint, formatUnits6, loanStatusName, parsePageParam,
 } from "../lib/format.js";
 
 export async function agentRoutes(app: FastifyInstance) {
@@ -39,6 +41,35 @@ export async function agentRoutes(app: FastifyInstance) {
     };
   });
 
+  // ── GET /agents/:agentId/identity ─────────────────────────────────────────
+  // Shape: IdentityResponse — { agentId, owner, walletCount, erc8004TokenId }
+  app.get<{ Params: { agentId: string } }>("/agents/:agentId/identity", async (req, reply) => {
+    const agentId = validateUint(req.params.agentId, "agentId");
+
+    const owner = await readContract({
+      address: contracts.agentRegistry,
+      abi:     AgentRegistryAbi,
+      functionName: "agentOwner",
+      args: [agentId],
+    }) as string;
+
+    if (!owner || owner === "0x0000000000000000000000000000000000000000") {
+      return reply.code(404).send({ error: `Agent ${agentId} does not exist` });
+    }
+
+    const [walletCount, erc8004Ref] = await Promise.all([
+      readContract({ address: contracts.agentRegistry, abi: AgentRegistryAbi, functionName: "walletCount", args: [agentId] }) as Promise<bigint>,
+      readContract({ address: contracts.agentRegistry, abi: AgentRegistryAbi, functionName: "erc8004Ref",  args: [agentId] }) as Promise<bigint>,
+    ]);
+
+    return {
+      agentId:        agentId.toString(),
+      owner,
+      walletCount:    walletCount.toString(),
+      erc8004TokenId: erc8004Ref.toString(),
+    };
+  });
+
   // ── GET /agents/:agentId/credit ───────────────────────────────────────────
   // Shape: CreditResponse — { agentId, limit, limitFormatted, record: { totalBorrowed, totalRepaid, activeLoans, completedLoans, defaultedLoans } }
   app.get<{ Params: { agentId: string } }>("/agents/:agentId/credit", async (req, reply) => {
@@ -55,98 +86,70 @@ export async function agentRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: `Agent ${agentId} does not exist` });
     }
 
+    // CreditRegistry is keyed by agentId (uint256), not by wallet address.
     const [limit, credits] = await Promise.all([
       readContract({
         address: contracts.creditRegistry,
         abi:     CreditRegistryAbi,
         functionName: "getLimit",
-        args: [owner as `0x${string}`],
+        args: [agentId],
       }) as Promise<bigint>,
       readContract({
         address: contracts.creditRegistry,
         abi:     CreditRegistryAbi,
         functionName: "credits",
-        args: [owner as `0x${string}`],
-      }) as Promise<readonly [bigint, bigint, bigint, bigint]>,
+        args: [agentId],
+      }) as Promise<readonly [bigint, bigint, bigint, boolean, bigint, bigint]>,
     ]);
 
-    // credits returns (totalBorrowed, totalRepaid, loanCount, defaultCount)
-    const [totalBorrowed, totalRepaid, loanCount, defaultCount] = credits;
+    // credits returns AgentCredit: (currentLimit, loansRepaid, loansDefaulted,
+    // exists, activityLimit, activityAttested).
+    const [, loansRepaid, loansDefaulted] = credits;
+
+    // Amounts and open-loan counts are derived from the agent's on-chain loans
+    // (CreditRegistry tracks counts, not amounts).
+    const stats = await fetchAgentLoanStats(agentId);
 
     return {
       agentId:        agentId.toString(),
       limit:          limit.toString(),
       limitFormatted: formatUnits6(limit),
       record: {
-        totalBorrowed:  totalBorrowed.toString(),
-        totalRepaid:    totalRepaid.toString(),
-        activeLoans:    "0",           // not tracked separately in CreditRegistry V1
-        completedLoans: loanCount.toString(),
-        defaultedLoans: defaultCount.toString(),
+        totalBorrowed:  stats.totalBorrowed.toString(),
+        totalRepaid:    stats.totalRepaid.toString(),
+        activeLoans:    stats.activeLoans.toString(),
+        completedLoans: loansRepaid.toString(),
+        defaultedLoans: loansDefaulted.toString(),
       },
     };
   });
 
   // ── GET /agents/:agentId/loans ────────────────────────────────────────────
-  // Returns LoanSummary[] by fetching LoanRequested events then getLoan for each.
+  // Returns LoanSummary[]. LoanRequested carries no agentId, so every loan is
+  // resolved via getLoan and filtered by its on-chain agentId, then paginated.
   app.get<{ Params: { agentId: string }; Querystring: { page?: string; pageSize?: string } }>(
     "/agents/:agentId/loans",
-    async (req, reply) => {
+    async (req) => {
       const agentId  = validateUint(req.params.agentId, "agentId");
-      const page     = Math.max(1, parseInt(req.query.page ?? "1", 10));
-      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize ?? "20", 10)));
+      const page     = parsePageParam(req.query.page, 1, Number.MAX_SAFE_INTEGER);
+      const pageSize = parsePageParam(req.query.pageSize, 20, 50);
 
-      const logs = await getLogs({
-        address: contracts.loanRegistry,
-        event: {
-          type: "event",
-          name: "LoanRequested",
-          inputs: [
-            { name: "loanId",   type: "uint256", indexed: true  },
-            { name: "agentId",  type: "uint256", indexed: true  },
-            { name: "borrower", type: "address", indexed: false },
-          ],
-        },
-        args: { agentId },
-        fromBlock: 0n,
-        toBlock:   "latest",
-      });
+      const ids = await fetchAllLoanIds();
+      const withViews = await fetchLoanViews(ids);
+      const mine = withViews.filter(({ view }) => view.agentId === agentId);
 
-      type LoanReqLog = { args?: { loanId?: bigint; agentId?: bigint; borrower?: string } };
-      const allLoanIds = logs.map((l) => (l as unknown as LoanReqLog).args?.loanId ?? 0n)
-                             .filter((id) => id > 0n || id === 0n);
-
-      const total = allLoanIds.length;
       const start = (page - 1) * pageSize;
-      const slice = allLoanIds.slice(start, start + pageSize);
+      const slice = mine.slice(start, start + pageSize);
 
-      // Fetch full loan details for this page
-      const summaries = await Promise.all(
-        slice.map(async (loanId) => {
-          const loan = await readContract({
-            address: contracts.loanRegistry,
-            abi:     LoanRegistryAbi,
-            functionName: "getLoan",
-            args: [loanId],
-          }) as {
-            agentId: bigint; borrower: string; lender: string; creditWallet: string;
-            principal: bigint; totalRepaymentDue: bigint; repaymentRateBps: number;
-            status: number; createdAt: bigint; expiresAt: bigint;
-          };
-
-          return {
-            loanId:           loanId.toString(),
-            borrower:         loan.borrower,
-            agentId:          loan.agentId.toString(),
-            status:           loan.status,
-            statusName:       loanStatusName(loan.status),
-            principal:        loan.principal.toString(),
-            principalFormatted: formatUnits6(loan.principal),
-          };
-        })
-      );
-
-      return summaries;
+      return slice.map(({ loanId, view }) => ({
+        loanId:             loanId.toString(),
+        borrower:           view.borrower,
+        agentId:            view.agentId.toString(),
+        status:             view.status,
+        statusName:         loanStatusName(view.status),
+        principal:          view.principal.toString(),
+        principalFormatted: formatUnits6(view.principal),
+      }));
     }
   );
 }

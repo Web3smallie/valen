@@ -20,17 +20,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "viem/_types/*": ["./node_modules/viem/_types/*"],
-      "/home/runner/_work/stablecoin-kits-private/stablecoin-kits-private/node_modules/viem/_types/accounts/index.d.ts": [
-        "./node_modules/viem/_types/accounts/index.d.ts"
-      ],
-      "/home/runner/_work/stablecoin-kits-private/stablecoin-kits-private/node_modules/zod/dist/types/index.d.ts": [
-        "./node_modules/@circle-fin/app-kit/node_modules/zod/dist/types/index.d.ts",
-        "./node_modules/zod/dist/types/index.d.ts"
-      ]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "scripts"]
+  "include": ["src"]
 }
 

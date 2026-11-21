@@ -108,6 +108,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidMaxActiveLoans();
     error ZeroToken();
     error ZeroRecipient();
+    error LoanDoesNotExist();
 
     modifier onlyLoanVault() {
         if (msg.sender != loanVault) revert NotLoanVault();
@@ -203,6 +204,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Called only by LoanVault, which has already independently
     ///         verified loan eligibility against LoanRegistry directly.
     function fundLoan(uint256 loanId, uint256 amount) external onlyLoanVault nonReentrant {
+        if (loanId >= loanRegistry.nextLoanId()) revert LoanDoesNotExist();
+        if (amount == 0) revert ZeroAmount();
         if (principalAdvanced[loanId] != 0) revert AlreadyFunded();
         if (amount > idleLedger) revert InsufficientLiquidity();
 
@@ -225,7 +228,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ///         reserve recovery) and updates pool accounting. Idempotent —
     ///         a no-op once nothing new has arrived for this loan.
     function reconcileLoan(uint256 loanId) public {
-        if (principalAdvanced[loanId] == 0) return;
+        if (principalAdvanced[loanId] == 0) {
+            // Self-healing: a tracked id with zero principal can only be a
+            // pre-fix phantom (or zero-principal) record — release its slot.
+            // Never reverts here: reconcileLoan runs inside _reconcileAll on
+            // every deposit/withdraw, so unknown ids must stay a safe no-op.
+            _untrackActiveLoan(loanId);
+            return;
+        }
         if (finalized[loanId]) return;
 
         // RISK-09 fix: use poolRecovered (= totalRecovered - reserveRepaid)

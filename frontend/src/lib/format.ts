@@ -15,15 +15,17 @@ export function fmtUsdc(raw: string | bigint | undefined): string {
   return `$${whole.toLocaleString()}.${fracStr}`
 }
 
+/** Loan status labels — must match ILoanRegistry.LoanStatus order (0–8). */
 export const LOAN_STATUSES: Record<number, { label: string; color: string }> = {
   0: { label: 'Requested', color: 'text-valen-warning' },
-  1: { label: 'Approved', color: 'text-valen-ink-2' },
-  2: { label: 'Pending Approval', color: 'text-valen-muted' },
-  3: { label: 'Rejected', color: 'text-valen-danger' },
+  1: { label: 'Pending Approval', color: 'text-valen-warning' },
+  2: { label: 'Approved', color: 'text-valen-ink-2' },
+  3: { label: 'Funded', color: 'text-valen-ink-2' },
   4: { label: 'Active', color: 'text-valen-success' },
   5: { label: 'Repaid', color: 'text-valen-success' },
   6: { label: 'Defaulted', color: 'text-valen-danger' },
-  7: { label: 'Cancelled', color: 'text-valen-muted' },
+  7: { label: 'Expired', color: 'text-valen-muted' },
+  8: { label: 'Cancelled', color: 'text-valen-muted' },
 }
 
 export function loanStatusInfo(status: number) {
