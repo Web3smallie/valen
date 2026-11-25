@@ -2,3 +2,4 @@
 * text=auto eol=crlf
 *.sol text eol=crlf
 *.t.sol text eol=crlf
+agent-card/agent-card.json -text
