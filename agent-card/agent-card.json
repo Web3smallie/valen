@@ -69,7 +69,7 @@
         "description": "Verified by Concordium badge — on-chain agent identity in a CIS-8004 registry",
         "required": false,
         "params": {
-          "tokenAddress": null,
+          "tokenAddress": "ccd:4221332d34e1694168c2a0c0b3fd0f27/cis-2:JyP9YAskQ5pWBESxthBcf",
           "owner": {
             "account": "ccd:4221332d34e1694168c2a0c0b3fd0f27:4JnNAPh8mrS2BF2wcaB9Cdp83JscgvXuboxoUnnxesv39kcrCR"
           },
@@ -81,13 +81,14 @@
           "externalReference": {
             "kind": "Cis8",
             "namespace": "eip155:5042002",
-            "identifier": "0xB0E8Ba6aFe21371AD4001e611224FC200FD10144",
+            "keyType": "secp256k1-uncompressed",
+            "publicKey": "04e6a2ba9a7bafb29119156252e2e42e4e7695d478cb26a118ee83c0471beb9b2dc9b52073d094fdceb7aaf718b0c750905965cebed0df1e4aaa157ec3f9852cab",
             "contractAddress": "ccd:4221332d34e1694168c2a0c0b3fd0f27:12801.0"
           },
           "verify": "Resolve tokenAddress via CIS-8004 agent_of; confirm owner + status=Active + card SHA-256 == metadata_hash.",
           "verification": {
             "service": "Concordium Agent Registry",
-            "verifyUrl": "https://agent-registry-mcp.concordium.com/v1/badge-check/4JnNAPh8mrS2BF2wcaB9Cdp83JscgvXuboxoUnnxesv39kcrCR",
+            "verifyUrl": "https://agent-registry-mcp.concordium.com/v1/badge-check/JyP9YAskQ5pWBESxthBcf",
             "mcp": "https://agent-registry-mcp.concordium.com/mcp",
             "docs": "https://docs.concordium.com/en/mainnet/technical-reference/agent-registry/concordium-badge.html"
           }
