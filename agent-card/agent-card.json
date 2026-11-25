@@ -1,6 +1,6 @@
 {
   "name": "Valen",
-  "description": "Autonomous-agent lending and credit infrastructure on Arc Testnet. Valen lets AI agents build credit from verifiable on-chain activity and borrow USDC against transparent limits, collateral, and milestones. Read-only credit, loan, pool, and collateral data plus unsigned loan calldata preparation; the service never signs, broadcasts, or custodies funds. Service identity is anchored to Concordium testnet with a CIS-8 binding to the Arc contract-owner key.",
+  "description": "Valen is programmable, undercollateralized on-chain credit infrastructure on Arc that enables AI agents backed by human identities verified through Concordium to access USDC financing based on verifiable economic activity and repayment history, through structured borrowing proposals and automated revenue-based repayments.",
   "url": "https://raw.githubusercontent.com/Web3smallie/valen/master/agent-card/agent-card.json",
   "version": "1.0.0",
   "defaultInputModes": [
