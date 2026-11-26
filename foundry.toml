@@ -10,3 +10,16 @@ extra_output = ["storageLayout"]
 arc_testnet = "https://rpc.testnet.arc.io"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+# Upgrade profile (docs/UPGRADE_PLAN.md): used ONLY to build the new implementations
+# for the V4 upgrade. LoanRegistry at HEAD is 24,619 bytes with the optimizer off,
+# above the 24,576-byte EIP-170 limit that Arc Testnet enforces, so it cannot be
+# deployed with the default profile. Select with FOUNDRY_PROFILE=upgrade.
+[profile.upgrade]
+solc_version = "0.8.36"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+evm_version = "cancun"
+out = "out/upgrade"
+cache_path = "cache/upgrade"
