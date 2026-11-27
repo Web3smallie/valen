@@ -1,0 +1,104 @@
+{
+  "_header": {
+    "network": "Arc Testnet",
+    "sourceCommit": "abd4225",
+    "deployedBuildSettings": "solc 0.8.36, optimizer off (default foundry profile)",
+    "dateLastUpdated": "2026-11-26",
+    "note": "Must be updated when any upgrade is run. Implementation code hashes are keccak256 of exact live runtime bytecode; the 11 deployed implementations were reproduced from commit abd4225 on 2026-11-27 (solc 0.8.36, optimizer off, forge 1.8.1) modulo the 53-byte CBOR metadata tail and three 32-byte __self immutable slots per contract. V4 is prepared but NOT deployed."
+  },
+  "chainId": 5042002,
+  "owner": "0xB0E8Ba6aFe21371AD4001e611224FC200FD10144",
+  "proxyCodeHash": "0x1dab702e382726507313883c4a87e9761a99d5fcb88747e76fa242a297f838e3",
+  "proxyCodeBytes": 212,
+  "contracts": [
+    {
+      "name": "AgentRegistry",
+      "proxy": "0xeC74944752Fff0f53Af5b727F288f59435C0144e",
+      "implementation": "0x797e0fcc4d05e2c606cc66c484418b602951cced",
+      "implementationCodeHash": "0x05f43da0d027ce7c7354f01d570779598b0435d75bfe675ad7c3b6159faf2d20"
+    },
+    {
+      "name": "CreditRegistry",
+      "proxy": "0x258B0678b30E2d32034389cfeCa7f58fE1CeB897",
+      "implementation": "0xf400dadaf8b01d16f5da65a2769a6b6e60dee1cd",
+      "implementationCodeHash": "0xf17ee7e570b700c96c3d19d00f5158ee19b714245254e4d7e7ae7a2a6a20c805"
+    },
+    {
+      "name": "LoanRegistry",
+      "proxy": "0x253B68c7a2D646561387Dc0958A6C176a30a6f8d",
+      "implementation": "0xd47496361e5c485611718bd06065971691d2ba07",
+      "implementationCodeHash": "0x3a8060d2382b69dd871ac94d3efb11b3aee889ef6455b73174645aa3edc3507e"
+    },
+    {
+      "name": "RevenueRouter",
+      "proxy": "0xE0B9b39E72f73f2d85D77a1e24a2f319246de822",
+      "implementation": "0x394D9f57F00f27B19b1549e23021Efed9CD7be38",
+      "implementationCodeHash": "0xac8ce58acafea4127343ad760b97a44286ae7b7bc74d6dce85bcb9d3437aa7d7"
+    },
+    {
+      "name": "LoanVault",
+      "proxy": "0x6F77979c0e2f6f8073FD6555c9A9d5883786AE19",
+      "implementation": "0xa698D80e5cAf0B4B5033Cd8091f1a37f98534537",
+      "implementationCodeHash": "0xd4c423db828cf60df6129997ee826a8e2224e70d0b870bfef1052794a4531b0f"
+    },
+    {
+      "name": "CollateralVault",
+      "proxy": "0xC49999B7d32F1B1Df28d53efAdee450A0Fd7dA2f",
+      "implementation": "0x9c1b6819b32615ca4d28d41be2a10303425b9ba5",
+      "implementationCodeHash": "0xc7fad99fc097ebf684ad3fe9ecd758d56b577da86a8d46d1a0b5e0b7ad3eb89c"
+    },
+    {
+      "name": "UnderwriterPool",
+      "proxy": "0x23307d061dad8335995080518B73A839Ffe69E7A",
+      "implementation": "0x49b018d11b869d7964c2c560c5dd233e64f2aa32",
+      "implementationCodeHash": "0xf4c98dda9733b7d74aa314291493346298b1c5c3e8679bab00f92fcbc349c6a1"
+    },
+    {
+      "name": "RecipientRegistry",
+      "proxy": "0xf8E069B659CEAf9c68318041D727b5c482Ac6374",
+      "implementation": "0xe10598c039dd26609e0758bf737a68c9fae15f54",
+      "implementationCodeHash": "0xffa20436fcb73e37ac74fde0be2b9e1abeb773490f45f5355838cea51cd86c55"
+    },
+    {
+      "name": "ReservePool",
+      "proxy": "0xe741d95aa64F125f75cB14E90d4b1cF96618f0fD",
+      "implementation": "0x9d488e961bdcb2fb00bfb7984605d3c00dae7dd7",
+      "implementationCodeHash": "0x60f5d35d2f841ac5445861b6d0fa79d19a39d31ae4fd38b6966e15ef8584acb1"
+    },
+    {
+      "name": "LiquidityPool",
+      "proxy": "0x04B22AD06256cFdD32546aCC6c40bFF9C3eFd061",
+      "implementation": "0x828525794b195329e8f1ae501a61d7590df542c1",
+      "implementationCodeHash": "0xfbc1a31a4c77b43ad91870f32ec1e7887be5d6cfe55c8008e9d1ba0d606b28c7"
+    },
+    {
+      "name": "ActivityAttester",
+      "proxy": "0x2660044E4A7316B65263ea1B23b80aAf09841196",
+      "implementation": "0x6e119483041ff34b72db722b1c6cd2324b036dd4",
+      "implementationCodeHash": "0xcec482123f2c0bab607cc9b814442a8b4b5a9ceffcc948e07c11f7bfdc33e160"
+    }
+  ],
+  "scan": {
+    "lastVerifiedBlock": 74164159,
+    "upgradedTopic0": "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",
+    "maxChunkBlocks": 9999,
+    "pinnedHistoryNote": "pinned, not re-verified in this run",
+    "pinnedHistory": [
+      {
+        "contract": "LoanRegistry",
+        "block": 66451385,
+        "tx": "0x7b8ff85c4335bfb832d574f010051fd95caac2038a86bf6f275c90156933952e"
+      },
+      {
+        "contract": "CollateralVault",
+        "block": 66450988,
+        "tx": "0xe11139df103b88714e301582d48d1ff623e0c5cb2b8df184d0cb7ec12e430e5d"
+      },
+      {
+        "contract": "LiquidityPool",
+        "block": 66451693,
+        "tx": "0x3572a2a9d691daaec05c91f1532ef40129c3577ee911f8fd9f93f9d51cded3fc"
+      }
+    ]
+  }
+}

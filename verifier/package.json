@@ -1,0 +1,22 @@
+{
+  "name": "valen-verifier",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent verifier for Valen's Concordium service-agent registration. Standalone: zero imports from backend/src/*.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@concordium/web-sdk": "12.0.3",
+    "@noble/curves": "1.9.7",
+    "viem": "2.56.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "typescript": "7.0.2",
+    "vitest": "3.2.7"
+  }
+}
