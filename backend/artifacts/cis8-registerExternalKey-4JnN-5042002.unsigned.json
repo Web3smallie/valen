@@ -1,0 +1,19 @@
+{
+  "energy": 30000,
+  "nonce": 1,
+  "payload": {
+    "address": {
+      "index": 12801,
+      "subindex": 0
+    },
+    "amount": "0",
+    "message": "0e0000006569703135353a3530343230303216000000736563703235366b312d756e636f6d707265737365644100000004e6a2ba9a7bafb29119156252e2e42e4e7695d478cb26a118ee83c0471beb9b2dc9b52073d094fdceb7aaf718b0c750905965cebed0df1e4aaa157ec3f9852cab16000000657468657265756d2d706572736f6e616c2d7369676e410000009d6599c0c74338985d9d7e7750b5316d1832a6a76d6da40cc14c72de8102cff16d4a42e1fcfef1ed3b0142035fbb8dd40f006cbcf70fe3b7371eec0fc95ece421b00000000",
+    "receiveName": "CIS-8.registerExternalKey",
+    "transactionType": "update"
+  },
+  "sender": "4JnNAPh8mrS2BF2wcaB9Cdp83JscgvXuboxoUnnxesv39kcrCR",
+  "signature": {},
+  "version": 1,
+  "expiryTime": 1795624954,
+  "signer": "4JnNAPh8mrS2BF2wcaB9Cdp83JscgvXuboxoUnnxesv39kcrCR"
+}

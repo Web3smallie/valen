@@ -1,0 +1,14 @@
+{
+ "network": "concordium-testnet",
+ "cis8": "12801,0",
+ "recordedAtHeight": "51273653",
+ "recordedAt": "2026-11-25T11:25:25.508Z",
+ "note": "Valen Step 2 binding (4JnN + Arc owner key). Registry normalizes storage to compressed echo.",
+ "txHash": "209dc1376379c89c0adc7a99f9f6fdc55ea879f68f9bdf3411dca78a3efd5c38",
+ "query": {
+  "namespace": "eip155:5042002",
+  "keyType": "secp256k1-uncompressed",
+  "pubkey": "04e6a2ba9a7bafb29119156252e2e42e4e7695d478cb26a118ee83c0471beb9b2dc9b52073d094fdceb7aaf718b0c750905965cebed0df1e4aaa157ec3f9852cab"
+ },
+ "returnValue": "01b376ffb2f41efa8a524ab6f6cf7b2f481c271d968ec21c4dd0a063647c516fea0e0000006569703135353a3530343230303214000000736563703235366b312d636f6d707265737365642100000003e6a2ba9a7bafb29119156252e2e42e4e7695d478cb26a118ee83c0471beb9b2d16000000657468657265756d2d706572736f6e616c2d7369676e00000000001b1f6f12a2010000"
+}
